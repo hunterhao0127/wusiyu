@@ -2,7 +2,7 @@
 
 > 一个支持 **Windows / macOS / 华为平板** 三端的英语阅读器，内置 AI 翻译、单词本、背单词记忆曲线，让英语阅读像微信一样轻快自然。
 
-![version](https://img.shields.io/badge/version-1.5-blue)
+![version](https://img.shields.io/badge/version-1.5.1-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-green)
 ![license](https://img.shields.io/badge/license-MIT-orange)
 
@@ -62,7 +62,7 @@
 │   ├── main.js            # Electron 主进程
 │   ├── build-mac.sh       # 一键构建脚本
 │   └── flask-app/         # Flask 后端源码
-└── 04-平板版/             # 华为平板版
+└── 04-Android版/             # 华为Android版
     ├── www/               # 纯前端（JS 解析 TXT/EPUB/PDF/DOCX）
     └── capacitor.config.json
 ```
@@ -97,7 +97,7 @@ npm run build-mac   # 生成 .dmg 安装包
 ### 华为平板
 
 ```bash
-cd 04-平板版
+cd 04-Android版
 # 用 Capacitor 打包 APK（需要 Android SDK）
 npx cap add android
 npx cap sync android
@@ -117,7 +117,7 @@ APK 传到平板后：微信收到书籍文件 → 右上角 ⋯ → **「用其
 | DeepSeek | `api.deepseek.com` | `deepseek-chat` |
 | 阿里千问 | `dashscope.aliyuncs.com` | `qwen-plus` |
 
-Key 在 **⚙️ 设置** 中配置，保存在本地（平板版保存在设备本地，与电脑版相互独立）。
+Key 在 **⚙️ 设置** 中配置，保存在本地（Android版保存在设备本地，与电脑版相互独立）。
 
 ---
 

@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox
 APP_NAME = "务思语"
 APP_EXE = "务思语.exe"
 APP_DIR = "务思语-win32-x64"
-VERSION = "1.5"
+VERSION = "1.5.1"
 PATH_FILE = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', '务思语_install_path.txt')
 
 if getattr(sys, 'frozen', False):

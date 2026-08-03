@@ -13,7 +13,7 @@ from tkinter import filedialog, messagebox
 # ─── 版本 ─────────────────────────────────────────
 APP_NAME = "务思语"
 APP_EXE = "务思语.exe"
-APP_VERSION = "1.5"
+APP_VERSION = "1.5.1"
 VERSION_FILE = "务思语_version.txt"
 
 # PyInstaller 打包后，嵌入的文件在 _MEIPASS 中
