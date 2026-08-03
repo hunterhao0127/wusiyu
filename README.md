@@ -19,7 +19,7 @@
 - **点击任意单词** → 弹出精简翻译（音标 + 词性 + 中文释义）
 - 点「查看详细释义」→ 展开完整解析：英式/美式发音、CEFR 难度、英文释义、本句义高亮、例句、同义词、反义词
 - **选中句子** → 句子翻译 + 结构解析
-- AI 引擎：支持 **DeepSeek** 和 **阿里千问 DashScope** 双提供商
+- AI 引擎：支持 **8 家 AI 大模型供应商**（DeepSeek / 千问 DashScope / OpenAI / Gemini / Claude / Kimi / 智谱 GLM / 自定义）
 
 ### 📕 单词本 + 背单词
 - 单词 / 词组 / 句子一键加入单词本（AI 自动识别类型）
@@ -83,7 +83,7 @@ pip install flask requests ebooklib pymupdf python-docx pywebview
 python app.py
 ```
 
-首次使用：⚙️ 设置 → 填入 DeepSeek 或 DashScope API Key → 保存并测试 → 开始阅读。
+首次使用：⚙️ 设置 → 选择任一支持的 AI 服务商，填入 API Key → 保存并测试 → 开始阅读。
 
 ### macOS
 
@@ -110,12 +110,18 @@ APK 传到平板后：微信收到书籍文件 → 右上角 ⋯ → **「用其
 
 ## 🔑 API Key 说明
 
-务思语调用 AI 大模型进行翻译，支持两个提供商：
+务思语调用 AI 大模型进行翻译，支持 8 家供应商（全部 OpenAI 兼容接口）：
 
-| 提供商 | 接口地址 | 模型 |
-|--------|---------|------|
-| DeepSeek | `api.deepseek.com` | `deepseek-chat` |
-| 阿里千问 | `dashscope.aliyuncs.com` | `qwen-plus` |
+| 服务商 | 接口地址 | 默认模型 |
+|--------|---------|---------|
+| 🟢 DeepSeek | `api.deepseek.com/v1` | `deepseek-chat` |
+| 🔵 千问 DashScope | `dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| ⚪ OpenAI | `api.openai.com/v1` | `gpt-4o-mini` |
+| 🔴 Google Gemini | `generativelanguage.googleapis.com/v1beta/openai` | `gemini-1.5-flash` |
+| 🟠 Anthropic Claude | `api.anthropic.com/v1` | `claude-3-5-haiku-latest` |
+| 🟣 Kimi 月之暗面 | `api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| 🟡 智谱 GLM | `open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| ✨ 自定义 | 任意 OpenAI 兼容接口 | 自定义 |
 
 Key 在 **⚙️ 设置** 中配置，保存在本地（Android版保存在设备本地，与电脑版相互独立）。
 
