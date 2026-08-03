@@ -36,7 +36,7 @@ APP_DIR = base_path()
 BOOKS_DIR = os.path.join(APP_DIR, 'books')
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 VERSION_FILE = os.path.join(APP_DIR, '务思语_version.txt')
-APP_VERSION = "1.5"
+APP_VERSION = "1.5.1"
 
 DEFAULT_CONFIG = {
     "api_key": "",
@@ -423,6 +423,8 @@ def handle_config():
         cfg["api_base"] = data["api_base"]
     if "model" in data and data["model"]:
         cfg["model"] = data["model"]
+    if "provider" in data and data["provider"]:
+        cfg["provider"] = data["provider"]
     save_config(cfg)
     return jsonify({"success": True})
 
@@ -563,6 +565,11 @@ def api_test_config():
 
     test_config = dict(load_config())
     test_config["api_key"] = api_key
+    # 支持前端传入临时 base/model 测试（多厂商切换时）
+    if data.get("api_base"):
+        test_config["api_base"] = data["api_base"]
+    if data.get("model"):
+        test_config["model"] = data["model"]
 
     result = call_ai_api([
         {"role": "user", "content": "回复 OK 表示连接正常"}
@@ -574,15 +581,40 @@ def api_test_config():
     return jsonify({"success": True, "message": result["content"]})
 
 
-# ─── 启动 ────────────────────────────────────────────────────
+# ─── 启动（原生窗口模式，绝不打开浏览器） ─────────────────
+
+def start_flask():
+    """在子线程启动 Flask 服务"""
+    os.makedirs(BOOKS_DIR, exist_ok=True)
+    app.run(host='127.0.0.1', port=5980, debug=False, use_reloader=False)
+
 
 if __name__ == '__main__':
-    os.makedirs(BOOKS_DIR, exist_ok=True)
-    print("╔══════════════════════════════════════╗")
-    print("║       务思语 - 英语沉浸阅读器         ║")
-    print(f"║      http://localhost:5980            ║")
-    print("╚══════════════════════════════════════╝")
-    # Electron 环境下不打开浏览器
-    if os.environ.get('WUSIYU_ELECTRON') != '1':
-        threading.Timer(1.5, lambda: webbrowser.open('http://localhost:5980')).start()
-    app.run(host='127.0.0.1', port=5980, debug=False)
+    import threading
+    import time
+
+    # 1. 子线程启动 Flask
+    flask_thread = threading.Thread(target=start_flask, daemon=True)
+    flask_thread.start()
+    time.sleep(2)  # 等 Flask 就绪
+
+    # 2. 创建原生窗口（像微信一样，无浏览器无控制台）
+    try:
+        import webview
+        webview.create_window(
+            title='务思语 - 英语沉浸阅读器',
+            url='http://localhost:5980',
+            width=1200, height=800,
+            resizable=True, min_size=(800, 600),
+            text_select=True,
+        )
+        webview.start()
+    except Exception as e:
+        print(f"原生窗口启动失败: {e}")
+        # 绝不弹浏览器——明确提示用户
+        try:
+            input("务思语需要 Edge WebView2 支持原生窗口，启动失败。请按回车退出...")
+        except:
+            pass
+    finally:
+        os._exit(0)

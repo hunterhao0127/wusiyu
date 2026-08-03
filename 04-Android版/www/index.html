@@ -1174,9 +1174,21 @@ body {
 
   <div class="field">
     <label>API 服务商</label>
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <button id="providerDeepseek" class="provider-btn active" onclick="setProvider('deepseek')" style="flex:1;padding:8px;border-radius:8px;border:2px solid #3b82f6;background:#eff6ff;color:#1d4ed8;font-size:14px;cursor:pointer;">🟢 DeepSeek</button>
-      <button id="providerDashscope" class="provider-btn" onclick="setProvider('dashscope')" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;cursor:pointer;">🔵 千问 DashScope</button>
+    <select id="providerSelect" onchange="setProvider(this.value)" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;margin-bottom:8px;cursor:pointer;">
+      <option value="deepseek">🟢 DeepSeek</option>
+      <option value="dashscope">🔵 千问 DashScope</option>
+      <option value="openai">⚪ OpenAI</option>
+      <option value="gemini">🔴 Google Gemini</option>
+      <option value="claude">🟠 Anthropic Claude</option>
+      <option value="moonshot">🟣 Kimi 月之暗面</option>
+      <option value="zhipu">🟡 智谱 GLM</option>
+      <option value="custom">✨ 自定义（任意 OpenAI 兼容）</option>
+    </select>
+    <div id="customApiFields" style="display:none;margin-bottom:8px;">
+      <label style="display:block;font-size:13px;color:var(--text-secondary);margin:6px 0 4px;">Base URL（OpenAI 兼容格式）</label>
+      <input type="text" id="customApiUrl" placeholder="https://api.example.com/v1/chat/completions" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;box-sizing:border-box;" />
+      <label style="display:block;font-size:13px;color:var(--text-secondary);margin:6px 0 4px;">模型名</label>
+      <input type="text" id="customApiModel" placeholder="your-model-name" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;box-sizing:border-box;" />
     </div>
     <label>API Key（按上方服务商填对应 key）</label>
     <input type="password" id="apiKey" placeholder="sk-..." />
@@ -1365,6 +1377,20 @@ function showToast(msg, type='') {
 // ─── API 调用（纯前端，支持 DeepSeek / DashScope） ─────────
 const API_KEY_STORAGE = 'wusiyu_api_key';
 const API_PROVIDER_STORAGE = 'wusiyu_api_provider';
+const API_CUSTOM_URL_STORAGE = 'wusiyu_api_custom_url';
+const API_CUSTOM_MODEL_STORAGE = 'wusiyu_api_custom_model';
+
+// ─── 支持所有 OpenAI 兼容 API 供应商 ─────────────
+const PROVIDERS = {
+  deepseek:  { name: '🟢 DeepSeek',          url: 'https://api.deepseek.com/chat/completions',                    model: 'deepseek-chat' },
+  dashscope: { name: '🔵 千问 DashScope',     url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
+  openai:    { name: '⚪ OpenAI',             url: 'https://api.openai.com/v1/chat/completions',                  model: 'gpt-4o-mini' },
+  gemini:    { name: '🔴 Google Gemini',      url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-1.5-flash' },
+  claude:    { name: '🟠 Anthropic Claude',   url: 'https://api.anthropic.com/v1/chat/completions',               model: 'claude-3-5-haiku-latest' },
+  moonshot:  { name: '🟣 Kimi 月之暗面',       url: 'https://api.moonshot.cn/v1/chat/completions',                 model: 'moonshot-v1-8k' },
+  zhipu:     { name: '🟡 智谱 GLM',           url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',       model: 'glm-4-flash' },
+  custom:    { name: '✨ 自定义',             url: '', model: '' }
+};
 
 function getApiKey() {
   return localStorage.getItem(API_KEY_STORAGE) || '';
@@ -1376,24 +1402,27 @@ function getProvider() {
 
 function setProvider(p) {
   localStorage.setItem(API_PROVIDER_STORAGE, p);
-  const b1 = document.getElementById('providerDeepseek');
-  const b2 = document.getElementById('providerDashscope');
-  if (b1 && b2) {
-    if (p === 'dashscope') {
-      b1.style.border = '2px solid var(--border)'; b1.style.background = 'var(--card-bg)'; b1.style.color = 'var(--text-primary)';
-      b2.style.border = '2px solid #3b82f6'; b2.style.background = '#eff6ff'; b2.style.color = '#1d4ed8';
-    } else {
-      b2.style.border = '2px solid var(--border)'; b2.style.background = 'var(--card-bg)'; b2.style.color = 'var(--text-primary)';
-      b1.style.border = '2px solid #3b82f6'; b1.style.background = '#eff6ff'; b1.style.color = '#1d4ed8';
-    }
+  const sel = document.getElementById('providerSelect');
+  if (sel) sel.value = p;
+  const custom = document.getElementById('customApiFields');
+  if (custom) custom.style.display = (p === 'custom') ? 'block' : 'none';
+  if (p === 'custom') {
+    const u = document.getElementById('customApiUrl');
+    const m = document.getElementById('customApiModel');
+    if (u) u.value = localStorage.getItem(API_CUSTOM_URL_STORAGE) || '';
+    if (m) m.value = localStorage.getItem(API_CUSTOM_MODEL_STORAGE) || '';
   }
 }
 
 function apiConfig(provider) {
-  if (provider === 'dashscope') {
-    return { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' };
+  const p = provider || getProvider();
+  if (p === 'custom') {
+    return {
+      url: localStorage.getItem(API_CUSTOM_URL_STORAGE) || '',
+      model: localStorage.getItem(API_CUSTOM_MODEL_STORAGE) || ''
+    };
   }
-  return { url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' };
+  return PROVIDERS[p] || PROVIDERS.deepseek;
 }
 
 async function callDeepSeek(messages, temperature = 0.3, max_tokens = 1500) {
@@ -1451,6 +1480,20 @@ async function saveApiKey() {
 
   // 先保存
   localStorage.setItem(API_KEY_STORAGE, key);
+
+  // 自定义模式下保存 URL 和模型
+  if (getProvider() === 'custom') {
+    const u = document.getElementById('customApiUrl');
+    const m = document.getElementById('customApiModel');
+    localStorage.setItem(API_CUSTOM_URL_STORAGE, (u && u.value.trim()) || '');
+    localStorage.setItem(API_CUSTOM_MODEL_STORAGE, (m && m.value.trim()) || '');
+    if (!localStorage.getItem(API_CUSTOM_URL_STORAGE)) {
+      el.apiStatus.textContent = '⚠️ 自定义模式请填写 Base URL';
+      el.apiStatus.style.color = '#d97706';
+      return;
+    }
+  }
+
   el.apiStatus.textContent = '✅ 已保存';
   el.apiStatus.style.color = '#16a34a';
   el.apiKeyInput.placeholder = '已配置: ' + key.slice(0, 6) + '...' + key.slice(-4);

@@ -44,8 +44,8 @@ _internal/
 **/flask-app/*.exe
 
 # ═══ 安卓构建副本（大文件） ═══
-04-平板版/android构建/
-04-平板版/android/
+04-Android版/android构建/
+04-Android版/android/
 
 # ═══ 已安装副本（Electron 安装目录，大文件） ═══
 05-已安装副本/

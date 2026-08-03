@@ -1159,7 +1159,24 @@ body {
   </h2>
 
   <div class="field">
-    <label>API Key（DeepSeek / DashScope）</label>
+    <label>API 服务商</label>
+    <select id="providerSelect" onchange="setProvider(this.value)" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;margin-bottom:8px;cursor:pointer;">
+      <option value="deepseek">🟢 DeepSeek</option>
+      <option value="dashscope">🔵 千问 DashScope</option>
+      <option value="openai">⚪ OpenAI</option>
+      <option value="gemini">🔴 Google Gemini</option>
+      <option value="claude">🟠 Anthropic Claude</option>
+      <option value="moonshot">🟣 Kimi 月之暗面</option>
+      <option value="zhipu">🟡 智谱 GLM</option>
+      <option value="custom">✨ 自定义（任意 OpenAI 兼容）</option>
+    </select>
+    <div id="customApiFields" style="display:none;margin-bottom:8px;">
+      <label style="display:block;font-size:13px;color:var(--text-secondary);margin:6px 0 4px;">Base URL（OpenAI 兼容格式）</label>
+      <input type="text" id="customApiUrl" placeholder="https://api.example.com/v1" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;box-sizing:border-box;" />
+      <label style="display:block;font-size:13px;color:var(--text-secondary);margin:6px 0 4px;">模型名</label>
+      <input type="text" id="customApiModel" placeholder="your-model-name" style="width:100%;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;box-sizing:border-box;" />
+    </div>
+    <label>API Key（按上方服务商填对应 key）</label>
     <input type="password" id="apiKey" placeholder="sk-..." />
     <div style="margin-top:6px;display:flex;gap:8px;">
       <button class="btn-primary" onclick="saveApiKey()" style="flex:1;">保存并测试</button>
@@ -1361,10 +1378,66 @@ async function loadSettingsUI() {
   try {
     const resp = await fetch('/api/config');
     const data = await resp.json();
-    if (data.success && data.config.api_key_masked) {
-      el.apiKeyInput.placeholder = '已配置: ' + data.config.api_key_masked;
+    if (data.success) {
+      const cfg = data.config;
+      if (cfg.api_key_masked) {
+        el.apiKeyInput.placeholder = '已配置: ' + cfg.api_key_masked;
+      }
+      // 恢复服务商下拉
+      const savedProvider = cfg.provider || 'deepseek';
+      const sel = document.getElementById('providerSelect');
+      if (sel) {
+        sel.value = savedProvider;
+        setProvider(savedProvider);
+      }
+      // 自定义模式下回填 URL/模型
+      if (savedProvider === 'custom') {
+        const u = document.getElementById('customApiUrl');
+        const m = document.getElementById('customApiModel');
+        if (u && cfg.api_base) u.value = cfg.api_base;
+        if (m && cfg.model) m.value = cfg.model;
+      }
     }
   } catch(e) {}
+}
+
+// ─── API 服务商（支持所有 OpenAI 兼容 API） ────────
+const PROVIDERS = {
+  deepseek:  { name: '🟢 DeepSeek',          base: 'https://api.deepseek.com/v1',                                                          model: 'deepseek-chat' },
+  dashscope: { name: '🔵 千问 DashScope',     base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',                                  model: 'qwen-plus' },
+  openai:    { name: '⚪ OpenAI',             base: 'https://api.openai.com/v1',                                                           model: 'gpt-4o-mini' },
+  gemini:    { name: '🔴 Google Gemini',      base: 'https://generativelanguage.googleapis.com/v1beta/openai',                             model: 'gemini-1.5-flash' },
+  claude:    { name: '🟠 Anthropic Claude',   base: 'https://api.anthropic.com/v1',                                                        model: 'claude-3-5-haiku-latest' },
+  moonshot:  { name: '🟣 Kimi 月之暗面',       base: 'https://api.moonshot.cn/v1',                                                          model: 'moonshot-v1-8k' },
+  zhipu:     { name: '🟡 智谱 GLM',           base: 'https://open.bigmodel.cn/api/paas/v4',                                                 model: 'glm-4-flash' },
+  custom:    { name: '✨ 自定义',             base: '', model: '' }
+};
+
+function getProvider() {
+  const sel = document.getElementById('providerSelect');
+  return sel ? sel.value : 'deepseek';
+}
+
+function setProvider(p) {
+  const sel = document.getElementById('providerSelect');
+  if (sel) sel.value = p;
+  const custom = document.getElementById('customApiFields');
+  if (custom) custom.style.display = (p === 'custom') ? 'block' : 'none';
+}
+
+function currentApiConfig() {
+  const p = getProvider();
+  if (p === 'custom') {
+    const u = document.getElementById('customApiUrl');
+    const m = document.getElementById('customApiModel');
+    return {
+      provider: 'custom',
+      api_base: (u && u.value.trim()) || '',
+      model: (m && m.value.trim()) || ''
+    };
+  }
+  const pc = PROVIDERS[p] || PROVIDERS.deepseek;
+  return { provider: p, api_base: pc.base, model: pc.model };
 }
 
 async function saveApiKey() {
@@ -1377,15 +1450,22 @@ async function saveApiKey() {
   el.apiStatus.textContent = '正在测试连接...';
   el.apiStatus.style.color = 'var(--text-secondary)';
 
-  const result = await apiPost('/api/config', { api_key: key });
+  const cfg = currentApiConfig();
+  if (cfg.provider === 'custom' && !cfg.api_base) {
+    el.apiStatus.textContent = '⚠️ 自定义模式请填写 Base URL';
+    el.apiStatus.style.color = '#d97706';
+    return;
+  }
+
+  const result = await apiPost('/api/config', { api_key: key, ...cfg });
   if (!result.success) {
     el.apiStatus.textContent = '保存失败: ' + (result.error || '未知错误');
     el.apiStatus.style.color = '#ef4444';
     return;
   }
 
-  // 测试
-  const testResult = await apiPost('/api/config/test', { api_key: key });
+  // 测试（带上 base/model，切厂商时立即生效）
+  const testResult = await apiPost('/api/config/test', { api_key: key, api_base: cfg.api_base, model: cfg.model });
   if (testResult.success) {
     el.apiStatus.textContent = '✅ 连接成功！可以开始使用了';
     el.apiStatus.style.color = '#16a34a';

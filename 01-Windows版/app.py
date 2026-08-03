@@ -36,7 +36,7 @@ APP_DIR = base_path()
 BOOKS_DIR = os.path.join(APP_DIR, 'books')
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 VERSION_FILE = os.path.join(APP_DIR, '务思语_version.txt')
-APP_VERSION = "1.5"
+APP_VERSION = "1.5.1"
 
 DEFAULT_CONFIG = {
     "api_key": "",
@@ -423,6 +423,8 @@ def handle_config():
         cfg["api_base"] = data["api_base"]
     if "model" in data and data["model"]:
         cfg["model"] = data["model"]
+    if "provider" in data and data["provider"]:
+        cfg["provider"] = data["provider"]
     save_config(cfg)
     return jsonify({"success": True})
 
@@ -563,6 +565,11 @@ def api_test_config():
 
     test_config = dict(load_config())
     test_config["api_key"] = api_key
+    # 支持前端传入临时 base/model 测试（多厂商切换时）
+    if data.get("api_base"):
+        test_config["api_base"] = data["api_base"]
+    if data.get("model"):
+        test_config["model"] = data["model"]
 
     result = call_ai_api([
         {"role": "user", "content": "回复 OK 表示连接正常"}

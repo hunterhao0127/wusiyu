@@ -1,9 +1,20 @@
 # 更新日志
 
+## v1.5.1 (2026-08-03)
+
+### ✨ 新功能
+- **支持所有 OpenAI 兼容 API 厂商**：DeepSeek / 千问 DashScope / OpenAI / Gemini / Claude / Kimi / 智谱 GLM / 自定义（任意兼容接口），全平台（Windows / Mac / Android）统一
+- 平板版更名 **Android 版**（04-Android版），APK 更名 `务思语_Android.apk`
+- 三端版本号统一为 v1.5.1
+
+### 🎨 改进
+- 设置面板：API 服务商下拉选择 + 自定义 Base URL / 模型名
+- 切换厂商后保存并测试立即生效（无需重启）
+
 ## v1.5.0 (2026-08-03)
 
 ### ✨ 新功能
-- 华为平板版 APK 发布（纯前端 + Capacitor，支持微信传书「用其他应用打开」）
+- 华为Android版 APK 发布（纯前端 + Capacitor，支持微信传书「用其他应用打开」）
 - 支持 **DeepSeek** 和 **阿里千问 DashScope** 双 AI 提供商
 - 内置示例书，首次启动自动导入
 
