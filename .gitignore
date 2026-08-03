@@ -1,0 +1,63 @@
+# ═══ 安全：密钥文件（绝不能上传） ═══
+config.json
+*.env
+.env
+**/config.json
+
+# ═══ 依赖 ═══
+node_modules/
+**/node_modules/
+
+# ═══ Python ═══
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# ═══ 构建产物目录（整个排除） ═══
+build/
+**/build/
+dist/
+**/dist/
+_internal/
+**/_internal/
+
+# ═══ 二进制库文件（打包产物，不提交） ═══
+*.dll
+*.pyd
+*.exe
+*.so
+*.dylib
+*.zip
+*.whl
+
+# ═══ 安装程序目录：只保留脚本，排除嵌入的 exe/库/书 ═══
+**/installer/*
+!**/installer/*.py
+!**/installer/*.bat
+!**/installer/*.txt
+
+# ═══ Electron 版的 Flask 打包副本（源码在 01/03 版） ═══
+02-Electron版/flask-app/
+**/flask-app/_internal/
+**/flask-app/*.exe
+
+# ═══ 安卓构建副本（大文件） ═══
+04-平板版/android构建/
+04-平板版/android/
+
+# ═══ 已安装副本（Electron 安装目录，大文件） ═══
+05-已安装副本/
+
+# ═══ 系统 ═══
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+
+# ═══ 编辑器 ═══
+.vscode/
+.idea/
+*.swp

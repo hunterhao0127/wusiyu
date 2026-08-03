@@ -1,0 +1,46 @@
+{
+  "name": "wusiyu",
+  "version": "1.5.0",
+  "description": "务思语 - 英语沉浸阅读器",
+  "main": "main.js",
+  "author": "wusiyu",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.wusiyu.reader",
+    "productName": "务思语",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "flask-app",
+        "to": "flask-app",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "build/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ]
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.ico"
+    }
+  }
+}
