@@ -1,0 +1,3041 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>务思语 - 英语沉浸阅读器</title>
+<style>
+/* ═══════════════════════ 基础 & 变量 ═══════════════════════ */
+:root {
+  --bg: #fafaf9;
+  --text: #1a1a2e;
+  --text-secondary: #6b7280;
+  --card-bg: #ffffff;
+  --border: #e5e7eb;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-light: #dbeafe;
+  --shadow: 0 4px 24px rgba(0,0,0,.08);
+  --radius: 12px;
+  --font-size: 18px;
+  --line-height: 1.9;
+  --max-width: 740px;
+  --topbar-height: 56px;
+  --sidebar-width: 280px;
+  --transition: .25s ease;
+}
+
+/* ── 主题变体 ── */
+[data-theme="sepia"] {
+  --bg: #f5edd6;
+  --text: #3b2f1a;
+  --text-secondary: #7a6a4e;
+  --card-bg: #fdf8ec;
+  --border: #e0d5b8;
+  --accent: #c9773c;
+  --accent-hover: #b0642e;
+  --accent-light: #f0e0c8;
+  --shadow: 0 4px 24px rgba(100,70,30,.1);
+}
+[data-theme="dark"] {
+  --bg: #0f0f1a;
+  --text: #e2e2e8;
+  --text-secondary: #9494a8;
+  --card-bg: #1a1a2e;
+  --border: #2a2a40;
+  --accent: #6c8cff;
+  --accent-hover: #8aa4ff;
+  --accent-light: #1e2240;
+  --shadow: 0 4px 24px rgba(0,0,0,.3);
+}
+
+/* ── 全局 ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, 'Segoe UI', 'Noto Serif SC', Georgia, serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: var(--line-height);
+  font-size: 16px;
+  transition: background var(--transition), color var(--transition);
+  overflow-x: hidden;
+}
+
+/* ═══════════════════════ 顶部栏 ═══════════════════════ */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--topbar-height);
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  transition: background var(--transition), border var(--transition);
+}
+.topbar .logo {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  margin-right: 24px;
+  cursor: default;
+}
+.topbar .logo span { font-weight: 300; color: var(--text-secondary); }
+.topbar .spacer { flex: 1; }
+.topbar .btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+.topbar .btn:hover { background: var(--accent-light); border-color: var(--accent); }
+.topbar .btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.topbar .btn-primary:hover { background: var(--accent-hover); }
+.topbar .book-title {
+  font-size: 15px;
+  color: var(--text-secondary);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════ 侧栏 ═══════════════════════ */
+.sidebar-overlay {
+  position: fixed; inset: 0; z-index: 199;
+  background: rgba(0,0,0,.3);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--transition);
+}
+.sidebar-overlay.active { opacity: 1; pointer-events: auto; }
+
+.sidebar {
+  position: fixed; top: 0; left: 0;
+  width: var(--sidebar-width);
+  height: 100vh;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border);
+  z-index: 200;
+  transform: translateX(-100%);
+  transition: transform var(--transition);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 2px 0 20px rgba(0,0,0,.1);
+}
+.sidebar.open { transform: translateX(0); }
+.sidebar-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-header .close-btn {
+  background: none; border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+}
+.sidebar-header .close-btn:hover { color: var(--text); }
+.sidebar-section {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-section h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.book-list { list-style: none; }
+.book-list li {
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background .15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.book-list li:hover,
+.book-list li.active { background: var(--accent-light); color: var(--accent); }
+.book-list li .ext {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--border);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.book-list li .del-book {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.book-list li:hover .del-book { opacity: 1; }
+.book-list li .del-book:hover { color: #ef4444; background: rgba(239,68,68,.1); }
+
+.import-actions {
+  padding: 8px 20px 12px;
+}
+.import-btn {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: var(--accent-light);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all .15s;
+}
+.import-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-style: solid;
+}
+.import-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 6px;
+}
+
+.chapter-list { list-style: none; overflow-y: auto; flex: 1; padding: 8px 0; }
+.chapter-list li {
+  padding: 7px 24px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all .15s;
+  border-left: 3px solid transparent;
+}
+.chapter-list li:hover { background: var(--accent-light); color: var(--text); }
+.chapter-list li.active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+/* ═══════════════════════ 设置面板 ═══════════════════════ */
+.settings-panel {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%,-50%) scale(.95);
+  width: 420px;
+  max-width: 90vw;
+  max-height: 85vh;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 300;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all var(--transition);
+  overflow-y: auto;
+}
+
+/* ═══ 拖拽上传覆盖层 ═══ */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(0,0,0,.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+  backdrop-filter: blur(4px);
+}
+.drop-overlay.active { opacity: 1; pointer-events: auto; }
+.drop-overlay .drop-content {
+  background: var(--card-bg);
+  border: 3px dashed var(--accent);
+  border-radius: 24px;
+  padding: 50px 70px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.drop-overlay .drop-icon { font-size: 56px; margin-bottom: 12px; }
+.drop-overlay .drop-text {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.drop-overlay .drop-formats {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.settings-panel.open { opacity: 1; pointer-events: auto; transform: translate(-50%,-50%) scale(1); }
+.settings-panel h2 {
+  font-size: 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-panel h2 .close-btn {
+  background: none; border: none;
+  font-size: 22px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+}
+.settings-panel .field { margin-bottom: 16px; }
+.settings-panel label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.settings-panel input[type="text"],
+.settings-panel input[type="password"],
+.settings-panel select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color .15s;
+}
+.settings-panel input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+.settings-panel .range-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-panel .range-row input[type="range"] { flex: 1; }
+.settings-panel .range-value {
+  min-width: 36px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.settings-panel .theme-btns {
+  display: flex;
+  gap: 8px;
+}
+.settings-panel .theme-btn {
+  flex: 1;
+  padding: 8px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 13px;
+  transition: all .15s;
+  background: var(--bg);
+  color: var(--text);
+}
+.settings-panel .theme-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.settings-panel .theme-btn[data-theme="light"] { background: #fafaf9; color: #1a1a2e; }
+.settings-panel .theme-btn[data-theme="sepia"] { background: #f5edd6; color: #3b2f1a; }
+.settings-panel .theme-btn[data-theme="dark"] { background: #1a1a2e; color: #e2e2e8; }
+.settings-panel .theme-btn.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+.settings-panel .btn-primary {
+  width: 100%;
+  padding: 10px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.settings-panel .btn-primary:hover { background: var(--accent-hover); }
+
+/* ═══════════════════════ 主阅读区 ═══════════════════════ */
+.main-area {
+  margin-top: var(--topbar-height);
+  min-height: calc(100vh - var(--topbar-height));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 20px 10px;
+  transition: background var(--transition);
+}
+
+.reader-container {
+  width: 100%;
+  max-width: var(--max-width);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-height) - 30px);
+}
+
+#paragraphs {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.nav-row { flex-shrink: 0; }
+.jump-row { flex-shrink: 0; }
+
+/* ── 空状态 ── */
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text-secondary);
+}
+.empty-state .icon { font-size: 56px; margin-bottom: 16px; opacity: .5; }
+.empty-state h2 { font-size: 20px; margin-bottom: 8px; }
+.empty-state p { font-size: 15px; max-width: 440px; margin: 0 auto; line-height: 1.6; }
+.empty-state .btn {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 10px 24px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: background .15s;
+}
+.empty-state .btn:hover { background: var(--accent-hover); }
+
+/* ── 段落 ── */
+.paragraph {
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  padding: 8px 0 18px;
+  margin-bottom: 6px;
+  cursor: text;
+  transition: color var(--transition);
+  user-select: text;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.paragraph:last-child { border-bottom: none; }
+.paragraph:hover { background: transparent; }
+.paragraph .word-clickable {
+  cursor: pointer;
+  border-radius: 2px;
+  padding: 0 1px;
+  transition: background .15s;
+  position: relative;
+}
+.paragraph .word-clickable:hover {
+  background: var(--accent-light);
+}
+
+/* ── 导航按钮 ── */
+.nav-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 40px;
+  gap: 12px;
+}
+.nav-row button {
+  padding: 10px 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all .15s;
+}
+.nav-row button:hover:not(:disabled) {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+.nav-row button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+.nav-row .page-info {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.nav-row .nav-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.nav-row .page-num {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+}
+
+/* ── 跳转条 ── */
+.jump-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 0;
+}
+.jump-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.jump-input {
+  width: 72px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  transition: border-color .15s;
+}
+.jump-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+.jump-mode {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.jump-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.jump-btn:hover { background: var(--accent-hover); }
+
+/* ═══════════════════════ 翻译弹窗 ═══════════════════════ */
+.trans-popup {
+  position: fixed;
+  z-index: 500;
+  width: 340px;
+  max-width: 90vw;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: all .2s ease;
+  overflow: hidden;
+}
+.trans-popup.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.trans-popup .popup-header {
+  padding: 12px 16px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.trans-popup .popup-word {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--accent);
+}
+.trans-popup .popup-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.trans-popup .popup-close:hover { background: var(--border); }
+.trans-popup .popup-body {
+  padding: 0 16px 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.trans-popup .popup-body .loading {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.trans-popup .popup-footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.trans-popup .popup-footer button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all .15s;
+}
+.trans-popup .popup-footer button:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+.trans-popup .popup-footer .btn-detail {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.trans-popup .popup-footer .btn-detail:hover { background: var(--accent-hover); }
+
+/* ── 增强单词展示 ── */
+.popup-pron-row {
+  display: flex;
+  gap: 12px;
+  margin: 6px 0 8px;
+}
+.popup-pron-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.popup-pron-item .flag { font-size: 15px; }
+.popup-pron-item .ipa { font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
+.popup-extra-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.popup-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.popup-badge-a1 { background: #22c55e; color: #fff; }
+.popup-badge-a2 { background: #4ade80; color: #1a1a2e; }
+.popup-badge-b1 { background: #facc15; color: #1a1a2e; }
+.popup-badge-b2 { background: #fb923c; color: #fff; }
+.popup-badge-c1 { background: #ef4444; color: #fff; }
+.popup-badge-c2 { background: #dc2626; color: #fff; }
+.popup-phonetic {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+  background: var(--bg);
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+.popup-def {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  padding: 4px 0;
+}
+.popup-def .pos { color: var(--accent); font-weight: 600; }
+.popup-section { margin-bottom: 4px; }
+.popup-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.popup-example {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding-left: 8px;
+  border-left: 2px solid var(--accent-light);
+  margin: 4px 0;
+}
+.popup-eng-def {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--accent);
+  font-style: italic;
+  padding: 6px 10px;
+  margin: 6px 0;
+  background: var(--accent-light);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+}
+.def-list { margin: 4px 0; }
+.def-item {
+  padding: 5px 10px;
+  margin: 3px 0;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  transition: all .15s;
+}
+.def-item-active {
+  color: var(--text);
+  background: var(--accent-light);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+.def-item-active em { font-style: italic; color: var(--accent); }
+.context-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ── 句子翻译 ── */
+.sentence-btn {
+  position: fixed;
+  z-index: 400;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s;
+  white-space: nowrap;
+}
+.sentence-btn.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ═══ 标记下划线（3 套配色） ═══ */
+/* 方案1 - 经典（默认） */
+[data-wb-theme="classic"] .wb-highlight-word,
+.wb-highlight-word { text-decoration: underline #E6A817 wavy 2px; text-underline-offset: 3px; }
+[data-wb-theme="classic"] .wb-highlight-phrase,
+.wb-highlight-phrase { text-decoration: underline #2E8B57 wavy 2px; text-underline-offset: 3px; }
+[data-wb-theme="classic"] .wb-highlight-sentence,
+.wb-highlight-sentence { text-decoration: underline #3B82F6 wavy 2px; text-underline-offset: 3px; }
+
+/* 方案2 - 温和 */
+[data-wb-theme="gentle"] .wb-highlight-word { text-decoration: underline #F97316 wavy 2px; text-underline-offset: 3px; }
+[data-wb-theme="gentle"] .wb-highlight-phrase { text-decoration: underline #8B5CF6 wavy 2px; text-underline-offset: 3px; }
+[data-wb-theme="gentle"] .wb-highlight-sentence { text-decoration: underline #06B6D4 wavy 2px; text-underline-offset: 3px; }
+
+/* 方案3 - 极简 */
+[data-wb-theme="minimal"] .wb-highlight-word { text-decoration: underline #EF4444 solid 2px; text-underline-offset: 3px; }
+[data-wb-theme="minimal"] .wb-highlight-phrase { text-decoration: underline #3B82F6 solid 2px; text-underline-offset: 3px; }
+[data-wb-theme="minimal"] .wb-highlight-sentence { text-decoration: underline #6B7280 solid 2px; text-underline-offset: 3px; }
+
+[data-theme="dark"] .wb-highlight-word,
+[data-theme="dark"] .wb-highlight-phrase,
+[data-theme="dark"] .wb-highlight-sentence { text-decoration-style: solid; }
+
+/* ═══ 单词本面板 ═══ */
+.wb-panel {
+  position: fixed; top: 0; right: 0;
+  width: 420px; height: 100vh;
+  background: var(--card-bg);
+  border-left: 1px solid var(--border);
+  z-index: 250;
+  box-shadow: -4px 0 24px rgba(0,0,0,.1);
+  transform: translateX(100%);
+  transition: transform .25s ease;
+  display: flex; flex-direction: column;
+}
+.wb-panel.open { transform: translateX(0); }
+.wb-panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.wb-panel-header h2 { font-size: 17px; font-weight: 700; }
+.wb-panel-header .close-btn {
+  background: none; border: none; font-size: 20px;
+  color: var(--text-secondary); cursor: pointer; padding: 4px;
+}
+.wb-panel-header .close-btn:hover { color: var(--text); }
+.wb-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.wb-tab {
+  flex: 1; padding: 10px; text-align: center;
+  font-size: 14px; cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  transition: all .15s;
+  background: none; border-top: none; border-left: none; border-right: none;
+}
+.wb-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.wb-count {
+  font-size: 12px; color: var(--text-secondary);
+  margin-left: 4px;
+}
+.wb-list {
+  flex: 1; overflow-y: auto; padding: 8px 0;
+}
+.wb-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .15s;
+}
+.wb-item:hover { background: var(--accent-light); }
+.wb-item .wb-type-icon { font-size: 16px; margin-top: 2px; flex-shrink: 0; }
+.wb-item .wb-main { flex: 1; min-width: 0; }
+.wb-item .wb-text {
+  font-weight: 600; font-size: 15px; color: var(--text);
+}
+.wb-item .wb-trans {
+  font-size: 13px; color: var(--text-secondary);
+  margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wb-item .wb-source {
+  font-size: 11px; color: var(--text-secondary);
+  margin-top: 2px; font-style: italic;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wb-item .wb-status {
+  font-size: 11px; padding: 2px 8px;
+  border-radius: 4px; flex-shrink: 0; margin-top: 2px;
+}
+.wb-status-pending { background: #fef3cd; color: #92400e; }
+.wb-status-learning { background: #dbeafe; color: #1e40af; }
+.wb-status-mastered { background: #d1fae5; color: #065f46; }
+.wb-item .wb-del {
+  background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; font-size: 16px; padding: 2px 4px;
+  opacity: 0; transition: opacity .15s;
+}
+.wb-item:hover .wb-del { opacity: 1; }
+.wb-item .wb-del:hover { color: #ef4444; }
+.wb-empty {
+  padding: 40px 20px; text-align: center; color: var(--text-secondary); font-size: 14px;
+}
+
+/* ═══ 背单词卡片 ═══ */
+.flash-overlay {
+  position: fixed; inset: 0; z-index: 600;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+}
+.flash-overlay.active { opacity: 1; pointer-events: auto; }
+.flash-header {
+  position: fixed; top: 0; left: 0; right: 0;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+.flash-header .flash-progress { font-size: 14px; color: var(--text-secondary); }
+.flash-close {
+  background: none; border: none; font-size: 20px;
+  color: var(--text-secondary); cursor: pointer;
+}
+.flash-card {
+  width: 90%; max-width: 520px;
+  min-height: 320px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .3s;
+  user-select: none;
+  position: relative;
+}
+.flash-card.flipped { transform: rotateY(180deg); }
+.flash-card-inner {
+  width: 100%;
+  text-align: center;
+}
+.flash-card .fc-word {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.flash-card .fc-pron {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+.flash-card .fc-trans {
+  font-size: 20px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.flash-card .fc-sentence {
+  font-size: 15px;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+  text-align: left;
+  line-height: 1.6;
+}
+.flash-card .fc-source {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+.flash-card .fc-tap-hint {
+  position: absolute;
+  bottom: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: .6;
+}
+.flash-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+.flash-actions button {
+  padding: 12px 28px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.flash-actions .btn-no {
+  background: #fca5a5;
+  color: #7f1d1d;
+}
+.flash-actions .btn-no:hover { background: #f87171; }
+.flash-actions .btn-fuzzy {
+  background: #fcd34d;
+  color: #78350f;
+}
+.flash-actions .btn-fuzzy:hover { background: #fbbf24; }
+.flash-actions .btn-yes {
+  background: #86efac;
+  color: #14532d;
+}
+.flash-actions .btn-yes:hover { background: #4ade80; }
+.flash-done {
+  text-align: center;
+  padding: 40px;
+}
+.flash-done .done-icon { font-size: 64px; margin-bottom: 16px; }
+.flash-done .done-title { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.flash-done .done-stats { font-size: 15px; color: var(--text-secondary); margin-bottom: 24px; line-height: 1.8; }
+.flash-done .done-btn {
+  padding: 12px 32px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* 选中文本的高亮 */
+::selection {
+  background: var(--accent-light);
+  color: var(--text);
+}
+
+/* ═══════════════════════ 加载提示 ═══════════════════════ */
+.toast {
+  position: fixed; bottom: 30px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 20px;
+  box-shadow: var(--shadow);
+  z-index: 600;
+  font-size: 14px;
+  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+}
+.toast.show { opacity: 1; }
+.toast.error { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+.toast.success { border-color: #22c55e; background: #f0fdf4; color: #16a34a; }
+[data-theme="dark"] .toast.error { background: #3b1010; color: #fca5a5; }
+[data-theme="dark"] .toast.success { background: #0a2e1a; color: #86efac; }
+
+/* ═══════════════════════ 滚动条 ═══════════════════════ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ═══════════════════════ 响应式 ═══════════════════════ */
+@media (max-width: 640px) {
+  .reader-container { max-width: 100%; }
+  .main-area { padding: 20px 16px 80px; }
+  .trans-popup { width: calc(100vw - 32px); left: 16px !important; }
+  .settings-panel { width: calc(100vw - 32px); }
+  .topbar .book-title { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ 顶部栏 ═══ -->
+<header class="topbar">
+  <div class="logo">务思<span>语</span></div>
+  <span class="book-title" id="bookTitle">请选择书籍</span>
+  <div class="spacer"></div>
+  <button class="btn" onclick="toggleSidebar()" title="书籍列表">📖 书籍</button>
+  <button class="btn" onclick="toggleSettings()" title="设置">⚙️</button>
+  <button class="btn" onclick="toggleWordbook()" title="单词本" style="margin-left:4px;">📕</button>
+</header>
+
+<!-- ═══ 侧栏 ═══ -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <span>📚 我的书籍</span>
+    <button class="close-btn" onclick="toggleSidebar()">✕</button>
+  </div>
+  <div class="sidebar-section">
+    <h3>已导入</h3>
+    <ul class="book-list" id="bookList">
+      <li style="color:var(--text-secondary);font-size:13px;padding:12px;">加载中...</li>
+    </ul>
+    <div class="import-actions">
+      <button class="import-btn" onclick="document.getElementById('fileInput').click()">
+        <span>➕</span> 从电脑导入
+      </button>
+      <input type="file" id="fileInput" accept=".txt,.epub,.pdf,.docx,.html,.htm" multiple style="display:none" onchange="handleFileSelect(event)" />
+      <div class="import-hint">支持 TXT · EPUB · PDF · DOCX · HTML</div>
+    </div>
+  </div>
+  <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;overflow:hidden;border-bottom:none;">
+    <h3>章节</h3>
+    <ul class="chapter-list" id="chapterList">
+      <li style="color:var(--text-secondary);font-size:13px;padding:12px;">请先选择书籍</li>
+    </ul>
+  </div>
+</aside>
+
+<!-- ═══ 单词本面板 ═══ -->
+<div class="wb-panel" id="wbPanel">
+  <div class="wb-panel-header">
+    <h2>📕 单词本</h2>
+    <button class="close-btn" onclick="toggleWordbook()">✕</button>
+  </div>
+  <div class="wb-panel-tabs">
+    <button class="wb-tab active" onclick="switchWbTab('all',this)">全部 <span class="wb-count" id="wbCountAll">0</span></button>
+    <button class="wb-tab" onclick="switchWbTab('word',this)">单词 <span class="wb-count" id="wbCountWord">0</span></button>
+    <button class="wb-tab" onclick="switchWbTab('phrase',this)">词组 <span class="wb-count" id="wbCountPhrase">0</span></button>
+    <button class="wb-tab" onclick="switchWbTab('sentence',this)">句子 <span class="wb-count" id="wbCountSentence">0</span></button>
+  </div>
+  <div class="wb-list" id="wbList">
+    <div class="wb-empty">还没有标记任何内容<br>阅读时点击单词或选中句子加入</div>
+  </div>
+  <div style="padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;">
+    <button class="btn-primary" style="width:100%;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer;" onclick="startFlashcards()">🧠 开始背单词</button>
+  </div>
+</div>
+
+<!-- ═══ 背单词覆盖层 ═══ -->
+<div class="flash-overlay" id="flashOverlay">
+  <div class="flash-header">
+    <span class="flash-progress" id="flashProgress">1 / 10</span>
+    <span style="font-weight:600;color:var(--text);">🧠 背单词</span>
+    <button class="flash-close" onclick="closeFlashcards()">✕</button>
+  </div>
+  <div class="flash-card" id="flashCard" onclick="flipCard(event)">
+    <div class="flash-card-inner" id="flashInner">
+      <div class="fc-word" id="fcWord">magnificent</div>
+      <div class="fc-pron" id="fcPron">/mæɡˈnɪfɪsnt/</div>
+      <div class="fc-tap-hint">👆 点击翻转</div>
+    </div>
+  </div>
+  <div class="flash-actions" id="flashActions" style="display:none;">
+    <button class="btn-no" onclick="flashReview('unknown')">❌ 不认识</button>
+    <button class="btn-fuzzy" onclick="flashReview('fuzzy')">❓ 模糊</button>
+    <button class="btn-yes" onclick="flashReview('known')">✅ 知道</button>
+  </div>
+  <div class="flash-done" id="flashDone" style="display:none;">
+    <div class="done-icon">🎉</div>
+    <div class="done-title">完成！</div>
+    <div class="done-stats" id="flashStats"></div>
+    <button class="done-btn" onclick="closeFlashcards()">返回单词本</button>
+  </div>
+</div>
+<div class="settings-panel" id="settingsPanel">
+
+<!-- ═══ 拖拽上传覆盖层 ═══ -->
+<div class="drop-overlay" id="dropOverlay">
+  <div class="drop-content">
+    <div class="drop-icon">📥</div>
+    <div class="drop-text">释放鼠标导入书籍</div>
+    <div class="drop-formats">TXT · EPUB · PDF · DOCX · HTML</div>
+  </div>
+</div>
+  <h2>
+    ⚙️ 设置
+    <button class="close-btn" onclick="toggleSettings()">✕</button>
+  </h2>
+
+  <div class="field">
+    <label>API 服务商</label>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button id="providerDeepseek" class="provider-btn active" onclick="setProvider('deepseek')" style="flex:1;padding:8px;border-radius:8px;border:2px solid #3b82f6;background:#eff6ff;color:#1d4ed8;font-size:14px;cursor:pointer;">🟢 DeepSeek</button>
+      <button id="providerDashscope" class="provider-btn" onclick="setProvider('dashscope')" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:var(--card-bg);color:var(--text-primary);font-size:14px;cursor:pointer;">🔵 千问 DashScope</button>
+    </div>
+    <label>API Key（按上方服务商填对应 key）</label>
+    <input type="password" id="apiKey" placeholder="sk-..." />
+    <div style="margin-top:6px;display:flex;gap:8px;">
+      <button class="btn-primary" onclick="saveApiKey()" style="flex:1;">保存并测试</button>
+    </div>
+    <div id="apiStatus" style="margin-top:6px;font-size:13px;color:var(--text-secondary);"></div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
+
+  <div class="field">
+    <label>主题</label>
+    <div class="theme-btns">
+      <button class="theme-btn active" data-theme="light" onclick="setTheme('light')">☀️ 白天</button>
+      <button class="theme-btn" data-theme="sepia" onclick="setTheme('sepia')">🟤 护眼</button>
+      <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">🌙 夜间</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>字号</label>
+    <div class="range-row">
+      <span style="font-size:12px;">A</span>
+      <input type="range" id="fontSizeRange" min="14" max="28" value="18" step="1" oninput="setFontSize(this.value)" />
+      <span style="font-size:20px;">A</span>
+      <span class="range-value" id="fontSizeValue">18</span>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>行距</label>
+    <div class="range-row">
+      <span>紧凑</span>
+      <input type="range" id="lineHeightRange" min="1.4" max="2.6" value="1.9" step="0.1" oninput="setLineHeight(this.value)" />
+      <span>宽松</span>
+      <span class="range-value" id="lineHeightValue">1.9</span>
+    </div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
+
+  <div class="field">
+    <label>标记下划线配色</label>
+    <div class="theme-btns" style="gap:6px;">
+      <button class="theme-btn wb-theme-btn active" data-wb-theme="classic" onclick="setWbTheme('classic')" style="flex:1;font-size:12px;">
+        <span style="display:block;font-size:16px;">🖍️</span>经典
+        <span style="display:block;font-size:10px;margin-top:2px;">
+          <span style="color:#E6A817;">━</span><span style="color:#2E8B57;">━</span><span style="color:#3B82F6;">━</span>
+        </span>
+      </button>
+      <button class="theme-btn wb-theme-btn" data-wb-theme="gentle" onclick="setWbTheme('gentle')" style="flex:1;font-size:12px;">
+        <span style="display:block;font-size:16px;">🎨</span>温和
+        <span style="display:block;font-size:10px;margin-top:2px;">
+          <span style="color:#F97316;">━</span><span style="color:#8B5CF6;">━</span><span style="color:#06B6D4;">━</span>
+        </span>
+      </button>
+      <button class="theme-btn wb-theme-btn" data-wb-theme="minimal" onclick="setWbTheme('minimal')" style="flex:1;font-size:12px;">
+        <span style="display:block;font-size:16px;">⚪</span>极简
+        <span style="display:block;font-size:10px;margin-top:2px;">
+          <span style="color:#EF4444;">━</span><span style="color:#3B82F6;">━</span><span style="color:#6B7280;">━</span>
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 主阅读区 ═══ -->
+<main class="main-area" id="mainArea">
+  <div class="reader-container" id="readerContainer">
+    <!-- 空状态 -->
+    <div class="empty-state" id="emptyState">
+      <div class="icon">📖</div>
+      <h2>欢迎使用务思语</h2>
+      <p>将 .txt 格式的英文书籍放入 <code>books/</code> 文件夹，然后点击右上角「书籍」按钮选择。</p>
+      <button class="btn" onclick="toggleSidebar()">📚 选择书籍</button>
+    </div>
+    <!-- 阅读内容 -->
+    <div id="readingArea" style="display:none;">
+      <div id="paragraphs"></div>
+      <div class="nav-row">
+        <button id="prevBtn" onclick="prevPage()">← 上一页</button>
+        <div class="nav-center">
+          <span class="page-num" id="pageNum">— 1 —</span>
+          <span class="page-info" id="pageInfo"></span>
+        </div>
+        <button id="nextBtn" onclick="nextPage()">下一页 →</button>
+      </div>
+      <div class="jump-row">
+        <span class="jump-label">跳转</span>
+        <input type="number" class="jump-input" id="jumpInput" placeholder="页码" min="1" />
+        <select class="jump-mode" id="jumpMode">
+          <option value="page">页码</option>
+          <option value="para">段落</option>
+        </select>
+        <button class="jump-btn" onclick="jumpTo()">GO</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ═══ 翻译弹窗（单词） ═══ -->
+<div class="trans-popup" id="wordPopup">
+  <div class="popup-header">
+    <span class="popup-word" id="popupWord">word</span>
+    <button class="popup-close" onclick="closeWordPopup()">✕</button>
+  </div>
+  <div class="popup-body" id="popupBody">
+    <span class="loading">翻译中...</span>
+  </div>
+  <div class="popup-footer" id="popupFooter">
+    <button onclick="popupToggleDetail()" class="btn-detail" id="popupDetailBtn">📖 查看详细释义</button>
+    <button onclick="closeWordPopup()">关闭</button>
+  </div>
+</div>
+
+<!-- ═══ 句子翻译按钮 ═══ -->
+<button class="sentence-btn" id="sentenceBtn" onclick="translateSelection()">📝 翻译句子</button>
+
+<!-- ═══ Toast 消息 ═══ -->
+<div class="toast" id="toast"></div>
+
+<script src="lib/jszip.min.js"></script>
+<script src="lib/epub.min.js"></script>
+<script src="lib/pdf.min.js"></script>
+<script src="lib/mammoth.min.js"></script>
+<script>
+/* ════════════════════════════════════════════════
+   务思语 - 沉浸式英语阅读器 前端逻辑
+   ════════════════════════════════════════════════ */
+
+// ─── 状态 ───────────────────────────────────────────
+let state = {
+  books: [],
+  currentBook: null,     // {name, filename, ext, path}
+  paragraphs: [],        // 当前书籍的段落数组
+  chapters: [],          // 章节信息
+  currentChapter: 0,
+  currentParaIndex: 0,   // 当前页起始段落索引
+  _currentPageEnd: 0,    // 当前页结束段落索引
+  pageSize: 999,         // 动态填充，不再固定估算
+  theme: 'light',
+  fontSize: 18,
+  lineHeight: 1.9,
+  translationMode: 'simple',  // simple / detailed
+  currentWord: '',
+  pendingTranslate: null, // 当前正在翻译的 promise
+};
+
+// ─── DOM 引用 ──────────────────────────────────────
+const $ = id => document.getElementById(id);
+const el = {
+  bookTitle: $('bookTitle'),
+  bookList: $('bookList'),
+  chapterList: $('chapterList'),
+  paragraphs: $('paragraphs'),
+  emptyState: $('emptyState'),
+  readingArea: $('readingArea'),
+  pageInfo: $('pageInfo'),
+  pageNum: $('pageNum'),
+  prevBtn: $('prevBtn'),
+  nextBtn: $('nextBtn'),
+  sidebar: $('sidebar'),
+  sidebarOverlay: $('sidebarOverlay'),
+  settingsPanel: $('settingsPanel'),
+  wordPopup: $('wordPopup'),
+  popupWord: $('popupWord'),
+  popupBody: $('popupBody'),
+  popupDetailBtn: $('popupDetailBtn'),
+  popupFooter: $('popupFooter'),
+  sentenceBtn: $('sentenceBtn'),
+  toast: $('toast'),
+  apiKeyInput: $('apiKey'),
+  apiStatus: $('apiStatus'),
+};
+
+// ─── Toast ────────────────────────────────────────
+function showToast(msg, type='') {
+  el.toast.textContent = msg;
+  el.toast.className = 'toast ' + type;
+  el.toast.classList.add('show');
+  clearTimeout(el.toast._timer);
+  el.toast._timer = setTimeout(() => el.toast.classList.remove('show'), 3000);
+}
+
+// ─── API 调用（纯前端，支持 DeepSeek / DashScope） ─────────
+const API_KEY_STORAGE = 'wusiyu_api_key';
+const API_PROVIDER_STORAGE = 'wusiyu_api_provider';
+
+function getApiKey() {
+  return localStorage.getItem(API_KEY_STORAGE) || '';
+}
+
+function getProvider() {
+  return localStorage.getItem(API_PROVIDER_STORAGE) || 'deepseek';
+}
+
+function setProvider(p) {
+  localStorage.setItem(API_PROVIDER_STORAGE, p);
+  const b1 = document.getElementById('providerDeepseek');
+  const b2 = document.getElementById('providerDashscope');
+  if (b1 && b2) {
+    if (p === 'dashscope') {
+      b1.style.border = '2px solid var(--border)'; b1.style.background = 'var(--card-bg)'; b1.style.color = 'var(--text-primary)';
+      b2.style.border = '2px solid #3b82f6'; b2.style.background = '#eff6ff'; b2.style.color = '#1d4ed8';
+    } else {
+      b2.style.border = '2px solid var(--border)'; b2.style.background = 'var(--card-bg)'; b2.style.color = 'var(--text-primary)';
+      b1.style.border = '2px solid #3b82f6'; b1.style.background = '#eff6ff'; b1.style.color = '#1d4ed8';
+    }
+  }
+}
+
+function apiConfig(provider) {
+  if (provider === 'dashscope') {
+    return { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' };
+  }
+  return { url: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat' };
+}
+
+async function callDeepSeek(messages, temperature = 0.3, max_tokens = 1500) {
+  const key = getApiKey();
+  if (!key) throw new Error('未配置 API Key');
+  const cfg = apiConfig(getProvider());
+  const resp = await fetch(cfg.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + key
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      messages,
+      temperature,
+      max_tokens
+    })
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.choices[0].message.content;
+}
+
+// ─── 设置 ──────────────────────────────────────────
+function toggleSettings() {
+  el.settingsPanel.classList.toggle('open');
+  if (el.settingsPanel.classList.contains('open')) {
+    loadSettingsUI();
+  }
+}
+
+async function loadSettingsUI() {
+  try {
+    const key = getApiKey();
+    if (key) {
+      el.apiKeyInput.placeholder = '已配置: ' + key.slice(0, 6) + '...' + key.slice(-4);
+    }
+    setProvider(getProvider());
+  } catch(e) {}
+}
+
+async function saveApiKey() {
+  const key = el.apiKeyInput.value.trim();
+  if (!key) {
+    el.apiStatus.textContent = '请输入 API Key';
+    el.apiStatus.style.color = 'var(--text-secondary)';
+    return;
+  }
+  el.apiStatus.textContent = '正在测试连接...';
+  el.apiStatus.style.color = 'var(--text-secondary)';
+
+  // 先保存
+  localStorage.setItem(API_KEY_STORAGE, key);
+  el.apiStatus.textContent = '✅ 已保存';
+  el.apiStatus.style.color = '#16a34a';
+  el.apiKeyInput.placeholder = '已配置: ' + key.slice(0, 6) + '...' + key.slice(-4);
+
+  // 测试
+  try {
+    const testResult = await callDeepSeek([
+      { role: 'user', content: 'ping' }
+    ], 0, 10);
+    if (testResult) {
+      el.apiStatus.textContent = '✅ 连接成功';
+      el.apiStatus.style.color = '#16a34a';
+    }
+  } catch(e) {
+    el.apiStatus.textContent = '⚠️ 已保存但测试失败: ' + e.message;
+    el.apiStatus.style.color = '#d97706';
+  }
+}
+
+// ─── 主题 ──────────────────────────────────────────
+function setTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('wusiyu_theme', theme);
+  document.querySelectorAll('.theme-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.theme === theme);
+  });
+}
+
+// ─── 标记下划线配色 ──────────────────────────────
+function setWbTheme(wbTheme) {
+  localStorage.setItem('wusiyu_wbTheme', wbTheme);
+  document.documentElement.setAttribute('data-wb-theme', wbTheme);
+  document.querySelectorAll('.wb-theme-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.wbTheme === wbTheme);
+  });
+}
+
+// ─── 字号 / 行距 ──────────────────────────────────
+function setFontSize(val) {
+  state.fontSize = parseInt(val);
+  document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
+  localStorage.setItem('wusiyu_fontSize', state.fontSize);
+  $('fontSizeValue').textContent = state.fontSize;
+}
+function setLineHeight(val) {
+  state.lineHeight = parseFloat(val);
+  document.documentElement.style.setProperty('--line-height', state.lineHeight);
+  localStorage.setItem('wusiyu_lineHeight', state.lineHeight);
+  $('lineHeightValue').textContent = state.lineHeight.toFixed(1);
+}
+
+// ─── 侧栏 ──────────────────────────────────────────
+function toggleSidebar() {
+  const open = el.sidebar.classList.toggle('open');
+  el.sidebarOverlay.classList.toggle('active', open);
+  if (open) loadBooks();
+}
+
+// ─── 书籍存储（IndexedDB） ───────────────────────
+const DB_NAME = 'wusiyu_books';
+const DB_VERSION = 1;
+let bookDB = null;
+
+function openBookDB() {
+  return new Promise((resolve, reject) => {
+    if (bookDB) return resolve(bookDB);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('books')) {
+        const store = db.createObjectStore('books', { keyPath: 'filename' });
+        store.createIndex('name', 'name', { unique: false });
+      }
+    };
+    req.onsuccess = (e) => { bookDB = e.target.result; resolve(bookDB); };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function dbGetAllBooks() {
+  const db = await openBookDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('books', 'readonly');
+    const req = tx.objectStore('books').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbPutBook(book) {
+  const db = await openBookDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('books', 'readwrite');
+    tx.objectStore('books').put(book);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbGetBook(filename) {
+  const db = await openBookDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('books', 'readonly');
+    const req = tx.objectStore('books').get(filename);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbDeleteBook(filename) {
+  const db = await openBookDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('books', 'readwrite');
+    tx.objectStore('books').delete(filename);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ─── TXT 解析（纯 JS） ───────────────────────────
+function parseTxt(text, filename) {
+  // 归一化换行
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // 按空行分段落
+  const rawParas = text.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
+  // 如果段落太少（可能没有空行），按单行分
+  let paragraphs = rawParas;
+  if (rawParas.length < 3) {
+    paragraphs = text.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+  }
+  // 检测章节标题（常见模式）
+  const chapters = [];
+  paragraphs.forEach((p, i) => {
+    const t = p.trim();
+    if (/^(chapter|CHAPTER|第[一二三四五六七八九十百千0-9]+[章节回])[\s.、]?/i.test(t) ||
+        /^Chapter\s+\d+[:\-\.]?\s*/i.test(t)) {
+      chapters.push({ title: t.slice(0, 40), start: i });
+    }
+  });
+  return { paragraphs, chapters };
+}
+
+// ─── EPUB 解析（JSZip 直接解析，更可靠） ────────
+async function parseEpub(file) {
+  if (typeof JSZip === 'undefined') throw new Error('EPUB 解析库未加载');
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+
+  // 1. 找 OPF 路径（container.xml）
+  const containerXml = await zip.file('META-INF/container.xml').async('text');
+  const opfMatch = containerXml.match(/full-path="([^"]+)"/);
+  if (!opfMatch) throw new Error('EPUB 缺少 container.xml');
+  const opfPath = opfMatch[1].replace(/\\/g, '/');
+
+  // 2. 读 OPF 找 spine 顺序 + manifest
+  const opfXml = await zip.file(opfPath).async('text');
+  const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+
+  const manifest = {};
+  const manRegex = /<item\s+[^>]*id="([^"]+)"[^>]*href="([^"]+)"/g;
+  let m;
+  while ((m = manRegex.exec(opfXml)) !== null) manifest[m[1]] = m[2];
+
+  const spineIds = [];
+  const spineRegex = /<itemref\s+[^>]*idref="([^"]+)"/g;
+  while ((m = spineRegex.exec(opfXml)) !== null) spineIds.push(m[1]);
+
+  // 3. 按 spine 顺序读取每章文字
+  const sections = [];
+  for (const id of spineIds) {
+    const href = manifest[id];
+    if (!href) continue;
+    const relPath = (opfDir + href).replace(/\/+/g, '/');
+    const file = zip.file(relPath);
+    if (!file) continue;
+    const html = await file.async('text');
+    // 提取纯文字
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const text = (doc.body ? doc.body.innerText : html.replace(/<[^>]+>/g, ' ')).trim();
+    if (text) sections.push(text);
+  }
+
+  if (sections.length === 0) throw new Error('EPUB 无法解析出文字内容');
+  return sections;
+}
+
+// ─── PDF 解析（pdf.js） ──────────────────────────
+async function parsePdf(file) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF 解析库未加载');
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
+  } catch(e) {}
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    try {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const lineText = content.items.map(item => item.str).join(' ');
+      fullText += lineText + '\n\n';
+    } catch(e) { /* 跳过损坏页 */ }
+  }
+  if (!fullText.trim()) throw new Error('PDF 无法提取文字（可能是扫描版）');
+  return fullText;
+}
+
+// ─── DOCX 解析（mammoth） ────────────────────────
+async function parseDocx(file) {
+  if (typeof mammoth === 'undefined') throw new Error('DOCX 解析库未加载');
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  if (!result.value || !result.value.trim()) throw new Error('DOCX 无法解析出文字');
+  return result.value;
+}
+
+// ─── 微信传书入口（Android 原生调用） ───────────
+async function importBookFromPath(path) {
+  if (typeof window.Capacitor === 'undefined') {
+    showToast('请在微信中选择「用其他应用打开」→ 务思语', 'error');
+    return;
+  }
+  try {
+    const { Filesystem, Encoding } = window.Capacitor.Plugins;
+    // 读为 base64（支持二进制格式）
+    const result = await Filesystem.readFile({ path, encoding: Encoding.BASE64 });
+    const bin = atob(result.data);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes]);
+    const filename = path.split(/[\\/]/).pop();
+    const file = new File([blob], filename);
+
+    showToast('正在导入: ' + filename + '...');
+    const book = await importBookFile(file);
+    await loadBooks();
+    openBook(book.filename);
+    showToast('✅ 已导入: ' + book.name, 'success');
+  } catch(e) {
+    showToast('导入失败: ' + e.message, 'error');
+  }
+}
+
+// ─── 导入书籍（FileReader 解析） ─────────────────
+async function importBookFile(file) {
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  const supported = ['.txt', '.epub', '.pdf', '.docx', '.html', '.htm'];
+  if (!supported.includes(ext)) throw new Error(`不支持 ${ext} 格式`);
+
+  let text = null;
+  let paragraphs = [];
+  let chapters = [];
+
+  if (ext === '.txt') {
+    text = await file.text();
+  } else if (ext === '.html' || ext === '.htm') {
+    text = await file.text();
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    text = doc.body ? doc.body.innerText : text;
+  } else if (ext === '.epub') {
+    const sections = await parseEpub(file);
+    text = sections.join('\n\n');
+  } else if (ext === '.pdf') {
+    text = await parsePdf(file);
+  } else if (ext === '.docx') {
+    text = await parseDocx(file);
+  }
+
+  const parsed = parseTxt(text, file.name);
+  paragraphs = parsed.paragraphs;
+  chapters = parsed.chapters;
+
+  if (paragraphs.length === 0) throw new Error('无法解析此书内容');
+
+  const name = file.name.replace(/\.[^.]+$/, '');
+  const book = {
+    filename: file.name,
+    name,
+    ext: ext.slice(1),
+    size: file.size,
+    addedAt: Date.now(),
+    paragraphs,
+    chapters
+  };
+
+  await dbPutBook(book);
+  return book;
+}
+
+// ─── 书籍列表 ─────────────────────────────────────
+async function loadBooks() {
+  try {
+    const books = await dbGetAllBooks();
+    state.books = books.map(b => ({
+      filename: b.filename, name: b.name, ext: b.ext,
+      size_str: b.size > 1048576 ? (b.size/1048576).toFixed(1)+'MB' : (b.size/1024).toFixed(0)+'KB'
+    }));
+    if (state.books.length === 0) {
+      el.bookList.innerHTML = '<li style="color:var(--text-secondary);padding:12px;font-size:13px;">暂无书籍，点击下方导入</li>';
+      return;
+    }
+    el.bookList.innerHTML = state.books.map(b =>
+      `<li class="${state.currentBook && state.currentBook.filename === b.filename ? 'active' : ''}"
+           onclick="openBook('${b.filename.replace(/'/g, "\\'")}')">
+         <span class="ext">${b.ext}</span>
+         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(b.name)}</span>
+         <span style="font-size:11px;color:var(--text-secondary);flex-shrink:0;">${b.size_str || ''}</span>
+         <button class="del-book" onclick="event.stopPropagation();deleteBook('${b.filename.replace(/'/g, "\\'")}')" title="删除">✕</button>
+       </li>`
+    ).join('');
+  } catch(e) {
+    el.bookList.innerHTML = '<li>加载失败: ' + escapeHtml(e.message) + '</li>';
+  }
+}
+
+// ─── 删除书籍 ────────────────────────────────────
+async function deleteBook(filename) {
+  if (!confirm(`确定删除「${filename}」吗？`)) return;
+  try {
+    await dbDeleteBook(filename);
+    localStorage.removeItem('wusiyu_history_' + filename);
+    if (state.currentBook && state.currentBook.filename === filename) {
+      state.currentBook = null;
+      state.paragraphs = [];
+      el.bookTitle.textContent = '务思语';
+      el.paragraphs.innerHTML = '';
+      el.emptyState.style.display = 'flex';
+    }
+    showToast('已删除', 'success');
+    loadBooks();
+  } catch(e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
+// ─── 打开书籍 ─────────────────────────────────────
+async function openBook(filename) {
+  toggleSidebar();
+  showToast('正在加载...');
+
+  try {
+    const book = await dbGetBook(filename);
+    if (!book) { showToast('书籍不存在', 'error'); return; }
+
+    state.currentBook = { filename: book.filename, name: book.name, ext: book.ext };
+    state.paragraphs = book.paragraphs;
+    state.chapters = book.chapters || [];
+    state.currentChapter = 0;
+    state.currentParaIndex = 0;
+
+    el.bookTitle.textContent = book.name;
+    el.emptyState.style.display = 'none';
+    el.readingArea.style.display = '';
+
+    // 恢复阅读历史
+    const history = loadReadingHistory(filename);
+    if (history && history.paraIndex < state.paragraphs.length) {
+      state.currentParaIndex = history.paraIndex;
+      for (let i = state.chapters.length - 1; i >= 0; i--) {
+        if (state.currentParaIndex >= state.chapters[i].start) {
+          state.currentChapter = i;
+          break;
+        }
+      }
+    }
+
+    // 渲染章节列表
+    renderChapters();
+    // 计算页大小
+    calcPageSize();
+    // 渲染当前页
+    renderPage();
+  } catch(e) {
+    showToast('加载失败: ' + e.message, 'error');
+  }
+}
+
+function renderChapters() {
+  if (!state.chapters || state.chapters.length <= 1) {
+    el.chapterList.innerHTML = '<li style="color:var(--text-secondary);font-size:13px;">无章节信息</li>';
+    return;
+  }
+  el.chapterList.innerHTML = state.chapters.map((ch, i) =>
+    `<li class="${i === state.currentChapter ? 'active' : ''}"
+         onclick="goToChapter(${i})">${ch.title}</li>`
+  ).join('');
+}
+
+function goToChapter(idx) {
+  if (!state.chapters[idx]) return;
+  state.currentChapter = idx;
+  state.currentParaIndex = state.chapters[idx].start;
+  state._currentPageEnd = 0; // 重置页缓存
+  renderPage();
+  // 高亮
+  el.chapterList.querySelectorAll('li').forEach((li, i) => li.classList.toggle('active', i === idx));
+}
+
+// ─── 分页 ──────────────────────────────────────────
+function calcPageSize() {
+  // 不再估算，渲染时动态填满视口
+  state.pageSize = 999; // 极大值，由 renderPage 按实际空间修剪
+}
+
+function renderPage() {
+  const start = state.currentParaIndex;
+  const total = state.paragraphs.length;
+
+  if (total === 0) {
+    el.emptyState.style.display = 'block';
+    el.readingArea.style.display = 'none';
+    return;
+  }
+
+  el.emptyState.style.display = 'none';
+  el.readingArea.style.display = 'block';
+
+  // 逐段渲染，实时测量高度，装满为止
+  const container = el.paragraphs;
+  // ⭐ 保存当前滚动位置，重建后恢复（避免跳回本页顶端）
+  const prevScroll = container.scrollTop;
+  container.innerHTML = '';
+
+  // 计算段落容器的固定高度：视口 - topbar - main padding - nav - jump
+  const topbarH = 56;
+  const mainPad = 30;
+  const navH = (el.pageNum?.offsetHeight || 40) + 16 + 53;
+  const availH = window.innerHeight - topbarH - mainPad - navH;
+  container.style.height = Math.max(150, availH) + 'px';
+
+  // 一行的大约高度（用于判断"短段落"）
+  const lineH = state.fontSize * state.lineHeight;
+
+  // 一次性渲染所有候选段落
+  let paraCount = 0;
+  for (let i = start; i < total && paraCount < 80; i++) {
+    const paraText = escapeHtml(state.paragraphs[i]);
+    const processed = processParagraph(paraText);
+    const div = document.createElement('div');
+    div.className = 'paragraph';
+    div.innerHTML = processed;
+    container.appendChild(div);
+    paraCount++;
+  }
+
+  // 词组/句子高亮：直接在 DOM 中搜文本节点包装
+  applyPhraseSentenceToDOM(container);
+
+  // 从后往前删，短段落有容差空间
+  while (paraCount > 0) {
+    const overflow = container.scrollHeight - container.clientHeight;
+    if (overflow <= 2) break;
+
+    // 检查最后一段是不是"短段落"（高度≈1行）
+    const last = container.lastChild;
+    const lastH = last.getBoundingClientRect().height;
+
+    // 短段落（≤1.5行高）允许溢出 1 行高度
+    const tolerance = (lastH <= lineH * 1.5) ? lineH * 1.2 : 2;
+
+    if (overflow <= tolerance) break;
+
+    container.removeChild(last);
+    paraCount--;
+  }
+
+  // 如果只剩 1 个短段落，尝试看能不能再多加一段
+  if (paraCount === 1 && total - start > 1) {
+    const onlyOne = container.firstChild;
+    const onlyH = onlyOne.getBoundingClientRect().height;
+    if (onlyH <= lineH * 2) {
+      // 只有一段而且是短的，强行再加一段
+      const nextIdx = start + 1;
+      if (nextIdx < total) {
+        const paraText = escapeHtml(state.paragraphs[nextIdx]);
+        const processed = processParagraph(paraText);
+        const div = document.createElement('div');
+        div.className = 'paragraph';
+        div.innerHTML = processed;
+        container.appendChild(div);
+        paraCount++;
+        // 如果再溢出就保持两段
+        if (container.scrollHeight > container.clientHeight + 4) {
+          container.removeChild(container.lastChild);
+          paraCount--;
+        }
+      }
+    }
+  }
+
+  // 保证至少有 1 段（即使超高也要显示）
+  if (paraCount === 0 && total > 0) {
+    const paraText = escapeHtml(state.paragraphs[start]);
+    const processed = processParagraph(paraText);
+    container.innerHTML = `<div class="paragraph" style="overflow:auto;">${processed}</div>`;
+    paraCount = 1;
+  }
+
+  const end = start + paraCount;
+  state._currentPageEnd = end;
+
+  // 页信息
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, paraCount)));
+  const currentPage = Math.floor(start / Math.max(1, paraCount)) + 1;
+  el.pageNum.textContent = `— ${currentPage} / ${totalPages} —`;
+  el.pageInfo.textContent = `第 ${start+1}-${end} 段 / 共 ${total} 段`;
+  el.prevBtn.disabled = start === 0;
+  el.nextBtn.disabled = end >= total;
+
+  // 更新章节高亮
+  highlightCurrentChapter();
+
+  // 保存阅读历史
+  if (state.currentBook && state.currentBook.filename) {
+    saveReadingHistory(state.currentBook.filename, start);
+  }
+
+  // ⭐ 恢复重建前的滚动位置（不跳回本页顶端）
+  requestAnimationFrame(() => {
+    if (container.scrollHeight > container.clientHeight) {
+      container.scrollTop = Math.min(prevScroll, container.scrollHeight - container.clientHeight);
+    } else {
+      container.scrollTop = 0;
+    }
+  });
+}
+
+function processParagraph(text) {
+  // 将单词用 span.word-clickable 包裹
+  // 匹配英文单词（包括带连字符的）
+  return text.replace(/\b([a-zA-Z]+(?:[''-][a-zA-Z]+)*)\b/g,
+    (match) => `<span class="word-clickable" data-word="${match.toLowerCase()}">${match}</span>`
+  );
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function highlightCurrentChapter() {
+  if (!state.chapters || state.chapters.length <= 1) return;
+  let idx = 0;
+  for (let i = state.chapters.length - 1; i >= 0; i--) {
+    if (state.currentParaIndex >= state.chapters[i].start) { idx = i; break; }
+  }
+  state.currentChapter = idx;
+  el.chapterList.querySelectorAll('li').forEach((li, i) => li.classList.toggle('active', i === idx));
+}
+
+function prevPage() {
+  if (state.currentParaIndex <= 0) return;
+  // 回到上一页的起始位置（往前倒退当前页的段落数）
+  const currentLen = state._currentPageEnd - state.currentParaIndex || 1;
+  state.currentParaIndex = Math.max(0, state.currentParaIndex - currentLen);
+  renderPage();
+}
+
+function nextPage() {
+  const next = state._currentPageEnd || (state.currentParaIndex + 1);
+  if (next >= state.paragraphs.length) return;
+  state.currentParaIndex = next;
+  renderPage();
+}
+
+// ─── 跳转 ─────────────────────────────────────────
+function jumpTo() {
+  const input = $('jumpInput');
+  const mode = $('jumpMode').value;
+  let val = parseInt(input.value);
+  if (!val || val < 1) { showToast('请输入有效数字', 'error'); return; }
+
+  if (mode === 'page') {
+    // 页码跳转：先估算页大小（用最近一页的实际长度），然后跳到对应位置
+    const estPageSize = Math.max(1, (state._currentPageEnd || state.pageSize || 5) - state.currentParaIndex);
+    const maxPage = Math.max(1, Math.ceil(state.paragraphs.length / estPageSize));
+    if (val > maxPage) {
+      showToast(`页码超出范围（共 ${maxPage} 页）`, 'error');
+      return;
+    }
+    state.currentParaIndex = Math.min((val - 1) * estPageSize, state.paragraphs.length - 1);
+  } else {
+    // 段落跳转
+    const paraIdx = val - 1; // 用户看到的 1-based
+    if (paraIdx >= state.paragraphs.length) {
+      showToast(`段落超出范围（共 ${state.paragraphs.length} 段）`, 'error');
+      return;
+    }
+    state.currentParaIndex = paraIdx;
+  }
+
+  input.value = '';
+  renderPage();
+  showToast(`已跳转到第 ${mode === 'page' ? val + ' 页' : val + ' 段'}`, 'success');
+}
+
+// Enter 键触发跳转
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.activeElement === $('jumpInput')) {
+    jumpTo();
+  }
+});
+
+// ─── 阅读历史 ────────────────────────────────────
+function loadReadingHistory(filename) {
+  try {
+    const all = JSON.parse(localStorage.getItem('wusiyu_history') || '{}');
+    return all[filename] || null;
+  } catch(e) { return null; }
+}
+
+function saveReadingHistory(filename, paraIndex) {
+  try {
+    const all = JSON.parse(localStorage.getItem('wusiyu_history') || '{}');
+    all[filename] = {
+      paraIndex: paraIndex,
+      timestamp: Date.now()
+    };
+    // 限制历史记录数量（最多 50 本书）
+    const keys = Object.keys(all);
+    if (keys.length > 50) {
+      // 删除最旧的一半
+      const sorted = keys.sort((a, b) => (all[a].timestamp || 0) - (all[b].timestamp || 0));
+      for (let i = 0; i < sorted.length - 50; i++) {
+        delete all[sorted[i]];
+      }
+    }
+    localStorage.setItem('wusiyu_history', JSON.stringify(all));
+  } catch(e) { /* ignore */ }
+}
+
+// ── 翻译结果渲染 ─────────────────────────────────────
+function renderWordTranslation(text, mode) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  if (lines.length === 0) return escapeHtml(text);
+
+  let pronHtml = '';
+  let extraHtml = '';
+  let defHtml = '';
+  let wordName = '';
+
+  // 解析每一行
+  for (const line of lines) {
+    // 跳过 Word: 行（已显示在标题）
+    if (/^Word:/i.test(line)) {
+      wordName = line.replace(/^Word:\s*/i, '').trim();
+      continue;
+    }
+    // British / American 发音
+    if (/^British:/i.test(line)) {
+      const ipa = line.replace(/^British:\s*/i, '').trim();
+      pronHtml += `<span class="popup-pron-item"><span class="flag">🇬🇧</span><span class="ipa">${escapeHtml(ipa)}</span></span>`;
+      continue;
+    }
+    if (/^American:/i.test(line)) {
+      const ipa = line.replace(/^American:\s*/i, '').trim();
+      pronHtml += `<span class="popup-pron-item"><span class="flag">🇺🇸</span><span class="ipa">${escapeHtml(ipa)}</span></span>`;
+      continue;
+    }
+    // Difficulty
+    if (/^Difficulty:/i.test(line)) {
+      const val = line.replace(/^Difficulty:\s*/i, '').trim();
+      const level = val.match(/[A-C][12]/)?.[0] || '';
+      const badgeClass = level ? `popup-badge-${level.toLowerCase()}` : '';
+      extraHtml += `<span class="popup-badge ${badgeClass}">🔶 ${escapeHtml(val)}</span>`;
+      continue;
+    }
+    // 释义（简单模式）
+    if (/^释义:/i.test(line)) {
+      const val = line.replace(/^释义:\s*/i, '').trim();
+      defHtml += renderDefLineSimple(val);
+      continue;
+    }
+    // ── 详细模式的行 ──
+    if (line.startsWith('【单词】')) {
+      const w = line.replace('【单词】', '').trim();
+      if (!wordName) wordName = w;
+      continue;
+    }
+    if (line.startsWith('【英式发音】')) {
+      const ipa = line.replace('【英式发音】', '').trim();
+      pronHtml += `<span class="popup-pron-item"><span class="flag">🇬🇧</span><span class="ipa">${escapeHtml(ipa)}</span></span>`;
+      continue;
+    }
+    if (line.startsWith('【美式发音】')) {
+      const ipa = line.replace('【美式发音】', '').trim();
+      pronHtml += `<span class="popup-pron-item"><span class="flag">🇺🇸</span><span class="ipa">${escapeHtml(ipa)}</span></span>`;
+      continue;
+    }
+    if (line.startsWith('【难度等级】')) {
+      const val = line.replace('【难度等级】', '').trim();
+      const level = val.match(/[A-C][12]/)?.[0] || '';
+      const badgeClass = level ? `popup-badge-${level.toLowerCase()}` : '';
+      extraHtml += `<span class="popup-badge ${badgeClass}">🔶 ${escapeHtml(val)}</span>`;
+      continue;
+    }
+    // 【英文释义】— English dictionary-style definition
+    if (line.startsWith('【英文释义】')) {
+      const val = line.replace('【英文释义】', '').trim();
+      if (val && val !== '...') {
+        defHtml += `<div class="popup-eng-def">📖 ${escapeHtml(val)}</div>`;
+      }
+      continue;
+    }
+    if (line.startsWith('【词性】')) {
+      const val = line.replace('【词性】', '').trim();
+      defHtml += `<span class="pos">${escapeHtml(val)}</span> `;
+      continue;
+    }
+    // 【释义】— 多义列表，含 ⬅️ 本句标记
+    if (line.startsWith('【释义】')) {
+      const val = line.replace('【释义】', '').trim();
+      defHtml += renderDefList(val);
+      continue;
+    }
+    if (line.startsWith('【例句】')) {
+      const val = line.replace('【例句】', '').trim();
+      const examples = val.split(/\d+\.\s*/).filter(Boolean);
+      if (examples.length > 0) {
+        defHtml += `<div class="popup-section"><div class="popup-section-title">例句</div>`;
+        for (const ex of examples) {
+          const parts = ex.split('→');
+          if (parts.length >= 2) {
+            defHtml += `<div class="popup-example">📌 ${escapeHtml(parts[0].trim())}<br>➜ ${escapeHtml(parts.slice(1).join('→').trim())}</div>`;
+          } else {
+            defHtml += `<div class="popup-example">📌 ${escapeHtml(ex.trim())}</div>`;
+          }
+        }
+        defHtml += `</div>`;
+      }
+      continue;
+    }
+    if (line.startsWith('【同义词】')) {
+      const val = line.replace('【同义词】', '').trim();
+      if (val && val !== '...') {
+        defHtml += `<div class="popup-section"><span style="font-size:12px;color:var(--text-secondary);">↗ 同义: </span><span style="font-size:13px;">${escapeHtml(val)}</span></div>`;
+      }
+      continue;
+    }
+    if (line.startsWith('【反义词】')) {
+      const val = line.replace('【反义词】', '').trim();
+      if (val && val !== '...') {
+        defHtml += `<div class="popup-section"><span style="font-size:12px;color:var(--text-secondary);">↘ 反义: </span><span style="font-size:13px;">${escapeHtml(val)}</span></div>`;
+      }
+      continue;
+    }
+    // 未匹配的行作为普通文本
+    defHtml += `<div>${escapeHtml(line)}</div>`;
+  }
+
+  // 组装
+  let result = '';
+  if (pronHtml) {
+    result += `<div class="popup-pron-row">${pronHtml}</div>`;
+  }
+  if (extraHtml) {
+    result += `<div class="popup-extra-row">${extraHtml}</div>`;
+  }
+  if (defHtml) {
+    result += `<div class="popup-def">${defHtml}</div>`;
+  }
+  if (!result) {
+    result = escapeHtml(text).replace(/\n/g, '<br>');
+  }
+  return result;
+}
+
+// 简单模式的释义行： [词性] 中文释义
+function renderDefLineSimple(val) {
+  let text = escapeHtml(val);
+  text = text.replace(/\[([^\]]+)\]/g, '<span class="pos">[$1]</span>');
+  return text;
+}
+
+// 详细模式的释义列表：处理多条含义 + ⬅️ 本句高亮
+function renderDefList(val) {
+  // 按数字编号分割
+  const items = val.split(/(?=\d+\.)/).filter(Boolean);
+  if (items.length === 0) return escapeHtml(val);
+
+  let html = '<div class="def-list">';
+  for (const item of items) {
+    const isContext = item.includes('⬅️');
+    const cls = isContext ? 'def-item def-item-active' : 'def-item';
+    // 高亮标记
+    let display = item.replace('⬅️ 本句', '').replace('⬅️', '').trim();
+    display = escapeHtml(display);
+    // 数字加粗
+    display = display.replace(/(\d+)\.(\s*)/g, '<strong>$1.</strong>$2');
+    // 把英文引号中的内容用斜体
+    display = display.replace(/'([^']+)'/g, "'<em>$1</em>'");
+    html += `<div class="${cls}">${display}`;
+    if (isContext) {
+      html += ` <span class="context-tag">本句义</span>`;
+    }
+    html += `</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+document.addEventListener('click', function(e) {
+  const wordSpan = e.target.closest('.word-clickable');
+  if (wordSpan) {
+    const word = wordSpan.dataset.word || wordSpan.textContent.trim();
+    showWordPopup(word, e);
+    return;
+  }
+
+  // 点击弹窗外关闭
+  if (!el.wordPopup.contains(e.target) &&
+      !el.sentenceBtn.contains(e.target)) {
+    closeWordPopup();
+  }
+});
+
+// ─── 单词翻译（直接调 DeepSeek） ─────────────────
+async function translateWord(word, mode) {
+  const w = word.trim().replace(/[,.!?;:"'(){}[\]]+$/g, '').trim();
+  if (!w || w.length > 50) throw new Error('无效的单词');
+
+  let prompt;
+  if (mode === 'simple') {
+    prompt = (
+      `You are an English-Chinese dictionary. Translate the English word '${w}'.\n` +
+      `Output format (keep it concise, 5 lines max):\n` +
+      `Word: ${w}\n` +
+      `British: /.../\n` +
+      `American: /.../\n` +
+      `Difficulty: [CEFR等级] [中文描述]\n` +
+      `释义: [词性] 中文释义（简洁）\n` +
+      `只用中文回复，不要额外解释。`
+    );
+  } else {
+    prompt = (
+      `You are an English-Chinese dictionary. Provide a detailed analysis for '${w}'.\n` +
+      `Output format:\n` +
+      `【单词】${w}\n` +
+      `【英式发音】/.../\n` +
+      `【美式发音】/.../\n` +
+      `【难度等级】[CEFR等级] [中文描述]\n` +
+      `【英文释义】[English definition in plain English, like Cambridge/Oxford dictionary style]\n` +
+      `【词性】...\n` +
+      `【释义】1. [English meaning (in English)] — 中文释义 ⬅️ 本句\n` +
+      `        2. [English meaning (in English)] — 中文释义\n` +
+      `        (列出所有主要含义，并在当前语境最可能的意思后面加 ⬅️ 本句)\n` +
+      `【例句】1. ...  → 中文翻译\n` +
+      `【同义词】...\n` +
+      `【反义词】...\n` +
+      `尽量全面，用中文+英文双语回复。`
+    );
+  }
+
+  const content = await callDeepSeek([
+    { role: 'system', content: '你是专业的英汉词典助手，输出简洁准确。' },
+    { role: 'user', content: prompt }
+  ]);
+  return content;
+}
+
+// ─── 句子翻译（直接调 DeepSeek） ─────────────────
+async function translateSentence(text) {
+  const sentence = text.trim();
+  if (!sentence || sentence.length > 2000) throw new Error('句子过长或为空');
+
+  const prompt = (
+    `Translate the following English sentence to Chinese:\n\n${sentence}\n\n` +
+    `Output format:\n` +
+    `【原文】${sentence}\n` +
+    `【翻译】...\n` +
+    `【解析】对句子结构和关键单词做简要说明。\n` +
+    `只用中文回复。`
+  );
+
+  const content = await callDeepSeek([
+    { role: 'system', content: '你是专业的英汉翻译和英语学习助手。' },
+    { role: 'user', content: prompt }
+  ]);
+  return content;
+}
+
+async function showWordPopup(word, event) {
+  state.currentWord = word;
+  el.popupWord.textContent = word;
+  el.popupBody.innerHTML = '<span class="loading">翻译中...</span>';
+  el.popupDetailBtn.textContent = '📖 查看详细释义';
+  el.wordPopup.classList.add('show');
+
+  // 定位弹窗
+  positionPopup(event);
+
+  // 加载精简翻译
+  state.translationMode = 'simple';
+  try {
+    const content = await translateWord(word, 'simple');
+    if (state.currentWord !== word) return; // 已切换到其他单词
+    el.popupBody.innerHTML = renderWordTranslation(content, 'simple');
+  } catch(e) {
+    if (state.currentWord === word) {
+      el.popupBody.innerHTML = '<span style="color:#ef4444;">翻译失败: ' + escapeHtml(e.message) + '</span>';
+    }
+  }
+}
+
+async function popupToggleDetail() {
+  const word = state.currentWord;
+  if (!word) return;
+
+  if (state.translationMode === 'detailed') {
+    // 切回简单模式
+    state.translationMode = 'simple';
+    el.popupDetailBtn.textContent = '📖 查看详细释义';
+    // 重新请求简单翻译
+    el.popupBody.innerHTML = '<span class="loading">加载中...</span>';
+    try {
+      const content = await translateWord(word, 'simple');
+      if (state.currentWord === word) {
+        el.popupBody.innerHTML = renderWordTranslation(content, 'simple');
+      }
+    } catch(e) {}
+    return;
+  }
+
+  // 请求详细翻译
+  state.translationMode = 'detailed';
+  el.popupDetailBtn.textContent = '🔄 加载中...';
+  try {
+    const content = await translateWord(word, 'detailed');
+    if (state.currentWord === word) {
+      el.popupBody.innerHTML = renderWordTranslation(content, 'detailed');
+      el.popupDetailBtn.textContent = '🔽 收起为精简';
+    }
+  } catch(e) {
+    el.popupDetailBtn.textContent = '📖 查看详细释义';
+    state.translationMode = 'simple';
+    if (state.currentWord === word) {
+      el.popupBody.innerHTML = '<span style="color:#ef4444;">' + escapeHtml(e.message) + '</span>';
+    }
+  }
+}
+
+function closeWordPopup() {
+  el.wordPopup.classList.remove('show');
+}
+
+function positionPopup(event) {
+  const popup = el.wordPopup;
+  const x = event.clientX;
+  const y = event.clientY;
+  const w = 340;
+  const h = 250;
+  const pad = 12;
+
+  let left = Math.min(x - w / 2, window.innerWidth - w - pad);
+  left = Math.max(pad, left);
+
+  // 下方优先
+  let top = y + 16;
+  if (top + h > window.innerHeight - pad) {
+    top = y - h - 12;
+  }
+  top = Math.max(pad, top);
+
+  popup.style.left = left + 'px';
+  popup.style.top = top + 'px';
+}
+
+// ─── 句子翻译 ─────────────────────────────────────
+document.addEventListener('mouseup', function(e) {
+  // 如果点击的是弹窗内的内容，不触发
+  if (el.wordPopup.contains(e.target)) return;
+
+  setTimeout(() => {
+    const selection = window.getSelection();
+    const text = selection.toString().trim();
+    if (text && text.length > 2 && text.length < 500) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      el.sentenceBtn.style.top = (rect.bottom + 8) + 'px';
+      el.sentenceBtn.style.left = Math.max(8, rect.left + rect.width / 2 - 60) + 'px';
+      el.sentenceBtn.classList.add('show');
+      el.sentenceBtn.dataset.text = text;
+    } else {
+      el.sentenceBtn.classList.remove('show');
+    }
+  }, 10);
+});
+
+document.addEventListener('mousedown', function(e) {
+  if (!el.sentenceBtn.contains(e.target)) {
+    el.sentenceBtn.classList.remove('show');
+  }
+});
+
+async function translateSelection() {
+  const text = el.sentenceBtn.dataset.text;
+  if (!text) return;
+  el.sentenceBtn.classList.remove('show');
+
+  closeWordPopup();
+
+  // 显示翻译弹窗（借用单词弹窗）
+  state.currentWord = text.substring(0, 20) + '...';
+  el.popupWord.textContent = '📝 句子翻译';
+  el.popupBody.innerHTML = '<span class="loading">翻译中...</span>';
+  el.popupFooter.style.display = 'none';
+  // 句子翻译隐藏详细按钮，但保留它在 DOM 中
+  if (el.popupDetailBtn) el.popupDetailBtn.style.display = 'none';
+
+  // 定位到选中区域
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0) {
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    const fakeEvent = { clientX: rect.left + rect.width / 2, clientY: rect.top - 10 };
+    positionPopup(fakeEvent);
+  }
+
+  el.wordPopup.classList.add('show');
+
+  try {
+    const content = await translateSentence(text);
+    el.popupBody.innerHTML = content.replace(/\n/g, '<br>');
+    // 恢复 footer 显示，保留原有的详细和关闭按钮
+    if (el.popupDetailBtn) el.popupDetailBtn.style.display = '';
+  } catch(e) {
+    el.popupBody.innerHTML = '<span style="color:#ef4444;">翻译失败: ' + escapeHtml(e.message) + '</span>';
+  } finally {
+    el.popupFooter.style.display = 'flex';
+    if (el.popupDetailBtn) el.popupDetailBtn.style.display = '';
+  }
+}
+
+// ─── 键盘快捷键 ──────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  // 如果弹窗开着，ESC 关闭
+  if (e.key === 'Escape') {
+    if (el.wordPopup.classList.contains('show')) { closeWordPopup(); return; }
+    if (el.settingsPanel.classList.contains('open')) { toggleSettings(); return; }
+    if (el.sidebar.classList.contains('open')) { toggleSidebar(); return; }
+  }
+  // 左右箭头翻页
+  if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    if (!el.wordPopup.classList.contains('show')) prevPage();
+  }
+  if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    if (!el.wordPopup.classList.contains('show')) nextPage();
+  }
+});
+
+// ─── 窗口变化 ─────────────────────────────────────
+let resizeTimer;
+window.addEventListener('resize', function() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    calcPageSize();
+    // 只在阅读状态下重排
+    if (state.paragraphs.length > 0) renderPage();
+  }, 300);
+});
+
+// ─── 单词本 ────────────────────────────────────────
+const WB_KEY = 'wusiyu_wordbook';
+
+function getWordbook() {
+  try { return JSON.parse(localStorage.getItem(WB_KEY) || '{}'); }
+  catch(e) { return {}; }
+}
+
+function saveWordbook(wb) {
+  localStorage.setItem(WB_KEY, JSON.stringify(wb));
+}
+
+function addToWordbook(entry) {
+  const wb = getWordbook();
+  const key = entry.type + ':' + entry.text.toLowerCase().trim();
+  if (wb[key]) { showToast('已在单词本中', 'error'); return false; }
+  entry.id = key;
+  entry.addedAt = Date.now();
+  entry.reviews = [];
+  entry.nextReview = Date.now();
+  entry.level = 0;
+  wb[key] = entry;
+  saveWordbook(wb);
+  showToast(`✅ 已加入 ${entry.type === 'word' ? '单词' : entry.type === 'phrase' ? '词组' : '句子'}本`, 'success');
+  // 刷新高亮
+  if (state.paragraphs.length > 0) renderPage();
+  return true;
+}
+
+function removeFromWordbook(id) {
+  const wb = getWordbook();
+  if (!wb[id]) return;
+  delete wb[id];
+  saveWordbook(wb);
+  if (state.paragraphs.length > 0) renderPage();
+  renderWordbookList();
+}
+
+function isInWordbook(text, type) {
+  const wb = getWordbook();
+  return wb[type + ':' + text.toLowerCase().trim()] || null;
+}
+
+function getHighlightClass(text, type) {
+  const entry = isInWordbook(text, type);
+  if (!entry) return '';
+  return 'wb-highlight-' + entry.type;
+}
+
+// ─── 单词本面板 ────────────────────────────────────
+let wbFilter = 'all';
+
+function toggleWordbook() {
+  const p = $('wbPanel');
+  const open = p.classList.toggle('open');
+  if (open) renderWordbookList();
+}
+
+function switchWbTab(filter, btn) {
+  wbFilter = filter;
+  document.querySelectorAll('.wb-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderWordbookList();
+}
+
+function renderWordbookList() {
+  const wb = getWordbook();
+  const items = Object.values(wb);
+  const list = $('wbList');
+
+  // 更新数量
+  const counts = { all: items.length, word: 0, phrase: 0, sentence: 0 };
+  items.forEach(i => { if (counts[i.type] !== undefined) counts[i.type]++; });
+  $('wbCountAll').textContent = counts.all;
+  $('wbCountWord').textContent = counts.word;
+  $('wbCountPhrase').textContent = counts.phrase;
+  $('wbCountSentence').textContent = counts.sentence;
+
+  const filtered = wbFilter === 'all' ? items : items.filter(i => i.type === wbFilter);
+  filtered.sort((a, b) => b.addedAt - a.addedAt);
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="wb-empty">暂无内容</div>';
+    return;
+  }
+
+  const typeIcons = { word: '🔤', phrase: '🔗', sentence: '📝' };
+  const statusMap = {
+    pending: { label: '待复习', cls: 'wb-status-pending' },
+    learning: { label: '学习中', cls: 'wb-status-learning' },
+    mastered: { label: '已掌握', cls: 'wb-status-mastered' }
+  };
+
+  list.innerHTML = filtered.map(entry => {
+    const now = Date.now();
+    const daysSinceReview = entry.reviews.length > 0
+      ? Math.floor((now - entry.reviews[entry.reviews.length - 1].date) / 86400000)
+      : 999;
+    const status = entry.level >= 5 ? 'mastered' : entry.reviews.length > 0 ? 'learning' : 'pending';
+    const s = statusMap[status];
+    return `<div class="wb-item">
+      <span class="wb-type-icon">${typeIcons[entry.type] || '📌'}</span>
+      <div class="wb-main">
+        <div class="wb-text">${escapeHtml(entry.text)}</div>
+        <div class="wb-trans">${escapeHtml(entry.translation || '')}</div>
+        <div class="wb-source">${escapeHtml(entry.source || '')}</div>
+      </div>
+      <span class="wb-status ${s.cls}">${s.label}</span>
+      <button class="wb-del" onclick="event.stopPropagation();removeFromWordbook('${entry.id}')" title="取消标记">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ─── 在翻译弹窗中加入单词本按钮 ──────────────────
+function getCurrentBookTitle() {
+  return state.currentBook ? state.currentBook.name || '' : '';
+}
+
+function addCurrentWordToBook() {
+  const word = state.currentWord;
+  const trans = el.popupBody.textContent || '';
+  const source = getCurrentBookTitle();
+  addToWordbook({
+    text: word,
+    type: 'word',
+    translation: trans.substring(0, 200),
+    source: source,
+    sentence: state._currentSentence || ''
+  });
+}
+
+function addCurrentSentenceToBook() {
+  const text = el.sentenceBtn.dataset.text || state.currentWord || '';
+  const trans = el.popupBody.textContent || '';
+  const source = getCurrentBookTitle();
+  addToWordbook({
+    text: text,
+    type: text.split(' ').length > 1 ? 'sentence' : 'word',
+    translation: trans.substring(0, 200),
+    source: source,
+    sentence: text
+  });
+}
+
+// ─── 自动识别类型 ──────────────────────────────────
+function detectType(text) {
+  const words = text.trim().split(/\s+/);
+  const len = words.length;
+  if (len === 0) return 'word';
+  if (len === 1) return 'word';
+  if (len <= 5) return 'phrase';
+  return 'sentence';
+}
+
+// ─── 高亮标记 ─────────────────────────────────────
+// 单词高亮：加 class 到 .word-clickable（在 HTML 阶段处理）
+function applyWordHighlights(paragraphHtml) {
+  const wb = getWordbook();
+  const wordEntries = Object.values(wb).filter(e => e.type === 'word');
+  if (wordEntries.length === 0) return paragraphHtml;
+
+  const wordSet = new Set(wordEntries.map(e => e.text.toLowerCase()));
+  const temp = document.createElement('div');
+  temp.innerHTML = paragraphHtml;
+  temp.querySelectorAll('.word-clickable').forEach(span => {
+    const w = (span.dataset.word || span.textContent).toLowerCase().trim();
+    if (wordSet.has(w)) span.classList.add('wb-highlight-word');
+  });
+  return temp.innerHTML;
+}
+
+// 词组/句子高亮：搜 DOM 文本节点（HTML 处理后再执行）
+function applyPhraseSentenceToDOM(container) {
+  const wb = getWordbook();
+  const entries = Object.values(wb).filter(e => e.type === 'phrase' || e.type === 'sentence');
+  if (entries.length === 0) return;
+
+  const paras = container.querySelectorAll('.paragraph');
+  for (const entry of entries) {
+    const cls = entry.type === 'phrase' ? 'wb-highlight-phrase' : 'wb-highlight-sentence';
+    const regex = new RegExp(escapeRegex(entry.text), 'gi');
+
+    for (const para of paras) {
+      // 遍历文本节点，找到匹配就包裹
+      const walker = document.createTreeWalker(para, NodeFilter.SHOW_TEXT, null, false);
+      const textNodes = [];
+      let node;
+      while (node = walker.nextNode()) textNodes.push(node);
+
+      for (const textNode of textNodes) {
+        const parent = textNode.parentNode;
+        if (!parent || parent.closest('.wb-highlight-phrase, .wb-highlight-sentence')) continue;
+
+        const matches = [...textNode.textContent.matchAll(regex)];
+        if (matches.length === 0) continue;
+
+        // 从后往前替换，以免位置偏移
+        for (let i = matches.length - 1; i >= 0; i--) {
+          const match = matches[i];
+          const idx = match.index;
+          const fullMatch = match[0];
+          const before = textNode.textContent.slice(0, idx);
+          const after = textNode.textContent.slice(idx + fullMatch.length);
+
+          const span = document.createElement('span');
+          span.className = cls;
+          span.textContent = fullMatch;
+
+          const frag = document.createDocumentFragment();
+          if (before) frag.appendChild(document.createTextNode(before));
+          frag.appendChild(span);
+          if (after) frag.appendChild(document.createTextNode(after));
+
+          parent.replaceChild(frag, textNode);
+          // textNode 已被替换，重新获取引用
+        }
+      }
+    }
+  }
+}
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// 替换 processParagraph
+const _origProcessParagraph = processParagraph;
+processParagraph = function(text) {
+  const html = _origProcessParagraph(text);
+  return applyWordHighlights(html);
+};
+
+// ─── 背单词模式 ────────────────────────────────────
+let flashItems = [];
+let flashIndex = 0;
+let flashFlipped = false;
+let flashStatsData = { known: 0, fuzzy: 0, unknown: 0 };
+
+function startFlashcards() {
+  const wb = getWordbook();
+  const items = Object.values(wb);
+  if (items.length === 0) { showToast('单词本为空，先添加单词吧', 'error'); return; }
+  // 按下次复习时间排序，待复习的优先
+  flashItems = items.sort((a, b) => (a.nextReview || 0) - (b.nextReview || 0));
+  flashIndex = 0;
+  flashFlipped = false;
+  flashStatsData = { known: 0, fuzzy: 0, unknown: 0 };
+  $('flashDone').style.display = 'none';
+  $('flashActions').style.display = 'none';
+  $('flashOverlay').classList.add('active');
+  toggleWordbook();
+  showFlashCard();
+}
+
+function closeFlashcards() {
+  $('flashOverlay').classList.remove('active');
+}
+
+function showFlashCard() {
+  if (flashIndex >= flashItems.length) {
+    showFlashDone();
+    return;
+  }
+  const item = flashItems[flashIndex];
+  flashFlipped = false;
+  $('flashProgress').textContent = `${flashIndex + 1} / ${flashItems.length}`;
+  $('fcWord').textContent = item.text;
+  $('fcPron').textContent = '';
+  $('flashActions').style.display = 'none';
+  $('flashInner').innerHTML = `
+    <div class="fc-word">${escapeHtml(item.text)}</div>
+    <div class="fc-pron"></div>
+    <div class="fc-tap-hint">👆 点击查看释义</div>
+  `;
+}
+
+function flipCard(event) {
+  if (event.target.closest('.flash-actions') || event.target.closest('.flash-header') || event.target.closest('.flash-done')) return;
+  if (flashFlipped) return;
+  flashFlipped = true;
+  const item = flashItems[flashIndex];
+  const typeIcons = { word: '🔤', phrase: '🔗', sentence: '📝' };
+  $('flashInner').innerHTML = `
+    <div class="fc-word">${escapeHtml(item.text)}</div>
+    <div class="fc-pron" style="color:var(--text-secondary);font-size:14px;">${typeIcons[item.type] || '📌'} ${escapeHtml(item.type === 'word' ? '单词' : item.type === 'phrase' ? '词组' : '句子')}</div>
+    <div class="fc-trans">${escapeHtml(item.translation || '')}</div>
+    ${item.sentence ? `<div class="fc-sentence">${escapeHtml(item.sentence)}</div>` : ''}
+    ${item.source ? `<div class="fc-source">📖 ${escapeHtml(item.source)}</div>` : ''}
+  `;
+  $('flashActions').style.display = 'flex';
+}
+
+function flashReview(result) {
+  if (!flashFlipped) return;
+  flashStatsData[result]++;
+
+  const item = flashItems[flashIndex];
+  const wb = getWordbook();
+  const key = item.id;
+  if (wb[key]) {
+    if (!wb[key].reviews) wb[key].reviews = [];
+    wb[key].reviews.push({ date: Date.now(), result: result });
+
+    // SM-2 简化版记忆曲线
+    if (result === 'known') {
+      wb[key].level = (wb[key].level || 0) + 1;
+    } else if (result === 'fuzzy') {
+      wb[key].level = Math.max(0, (wb[key].level || 0) - 1);
+    } else {
+      wb[key].level = 0;
+    }
+    // 计算下次复习间隔: 1天 / 2天 / 4天 / 8天 / 16天 / 32天
+    const intervals = [1, 1, 2, 4, 8, 16, 32];
+    const days = intervals[Math.min(wb[key].level, intervals.length - 1)];
+    wb[key].nextReview = Date.now() + days * 86400000;
+
+    saveWordbook(wb);
+  }
+
+  flashIndex++;
+  showFlashCard();
+}
+
+function showFlashDone() {
+  $('flashCard').style.display = 'none';
+  $('flashActions').style.display = 'none';
+  $('flashDone').style.display = 'block';
+  $('flashStats').innerHTML =
+    `✅ 知道: ${flashStatsData.known}<br>` +
+    `❓ 模糊: ${flashStatsData.fuzzy}<br>` +
+    `❌ 不认识: ${flashStatsData.unknown}<br><br>` +
+    `总复习: ${flashStatsData.known + flashStatsData.fuzzy + flashStatsData.unknown} 个`;
+}
+
+// ─── 翻译弹窗加「加入单词本」按钮 ─────────────────
+function addWbButtonToPopup(text, type) {
+  const existing = isInWordbook(text, type);
+  const footer = el.popupFooter;
+  footer.querySelectorAll('.wb-popup-btn').forEach(b => b.remove());
+  const btn = document.createElement('button');
+  btn.className = 'wb-popup-btn';
+  btn.style.cssText = 'margin-left:auto;';
+  if (existing) {
+    btn.textContent = '❌ 取消标记';
+    btn.style.color = '#ef4444';
+    btn.onclick = function() {
+      const key = type + ':' + text.toLowerCase().trim();
+      removeFromWordbook(key);
+      showToast('已从单词本移除', 'success');
+      // 刷新弹窗按钮
+      addWbButtonToPopup(text, type);
+    };
+  } else {
+    btn.textContent = '📝 加入单词本';
+    btn.onclick = function() {
+      const source = getCurrentBookTitle();
+      const trans = el.popupBody.textContent || '';
+      const success = addToWordbook({
+        text: text, type: type,
+        translation: trans.substring(0, 200),
+        source: source, sentence: text
+      });
+      if (success) {
+        // 刷新弹窗按钮（变为取消标记）
+        addWbButtonToPopup(text, type);
+      }
+    };
+  }
+  footer.appendChild(btn);
+}
+
+// ─── 拖拽导入书籍 ──────────────────────────────────
+const dropOverlay = $('dropOverlay');
+let dragCounter = 0;
+
+document.addEventListener('dragenter', function(e) {
+  e.preventDefault();
+  dragCounter++;
+  dropOverlay.classList.add('active');
+});
+
+document.addEventListener('dragleave', function(e) {
+  e.preventDefault();
+  dragCounter--;
+  if (dragCounter <= 0) {
+    dragCounter = 0;
+    dropOverlay.classList.remove('active');
+  }
+});
+
+document.addEventListener('dragover', function(e) {
+  e.preventDefault();
+});
+
+document.addEventListener('drop', function(e) {
+  e.preventDefault();
+  dragCounter = 0;
+  dropOverlay.classList.remove('active');
+  const files = Array.from(e.dataTransfer.files);
+  uploadFiles(files);
+});
+
+// ─── 文件选择上传 ──────────────────────────────────
+async function handleFileSelect(event) {
+  const files = Array.from(event.target.files);
+  if (files.length === 0) return;
+  event.target.value = '';
+  uploadFiles(files);
+}
+
+async function uploadFiles(files) {
+  const supported = ['.txt', '.epub', '.pdf', '.docx', '.html', '.htm'];
+  let success = 0;
+  let failed = 0;
+
+  for (const file of files) {
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!supported.includes(ext)) {
+      showToast(`不支持 ${ext} 格式`, 'error');
+      failed++;
+      continue;
+    }
+
+    showToast(`正在导入: ${file.name}...`);
+
+    try {
+      await importBookFile(file);
+      success++;
+    } catch(e) {
+      showToast(`导入失败: ${e.message}`, 'error');
+      failed++;
+    }
+  }
+
+  // 刷新书籍列表
+  await loadBooks();
+
+  // 如果只上传了一本书，自动打开
+  if (files.length === 1 && success === 1) {
+    const newBook = state.books.find(b => b.name === files[0].name.replace(/\.[^.]+$/, ''));
+    if (newBook) {
+      openBook(newBook.filename);
+    }
+  }
+
+  if (success > 0) {
+    showToast(`✅ 成功导入 ${success} 本书`, 'success');
+  }
+}
+(async function init() {
+  // 加载本地偏好
+  const savedTheme = localStorage.getItem('wusiyu_theme') || 'light';
+  const savedFontSize = parseInt(localStorage.getItem('wusiyu_fontSize')) || 18;
+  const savedLineHeight = parseFloat(localStorage.getItem('wusiyu_lineHeight')) || 1.9;
+
+  setTheme(savedTheme);
+  $('fontSizeRange').value = savedFontSize;
+  $('fontSizeValue').textContent = savedFontSize;
+  setFontSize(savedFontSize);
+  $('lineHeightRange').value = savedLineHeight;
+  $('lineHeightValue').textContent = savedLineHeight.toFixed(1);
+  setLineHeight(savedLineHeight);
+
+  // 加载书籍列表
+  await loadBooks();
+
+  // 首次使用：导入示例书
+  if (state.books.length === 0) {
+    const sample = {
+      filename: 'The Wonderful World of Words.txt',
+      name: 'The Wonderful World of Words',
+      ext: 'txt',
+      size: 0,
+      addedAt: Date.now(),
+      paragraphs: [
+        'Chapter 1: The Magic of Words',
+        'Language is one of the most magnificent tools that human beings have ever developed. It allows us to share our thoughts, express our emotions, and connect with one another across vast distances of space and time.',
+        'Every word in our vocabulary is like a tiny window into the world. When we learn a new word, we are not just memorizing a definition; we are gaining a new way of seeing and understanding the world around us.',
+        'The English language contains over one million words, making it one of the richest and most expressive languages on Earth. Yet the average person uses only about twenty thousand words in their daily life.',
+        'Chapter 2: The Power of Reading',
+        'Reading is a journey of discovery. When you open a book, you open a door to new ideas, new worlds, and new possibilities. Every page you turn is a step forward on your path to knowledge.',
+        'Great readers are not born; they are made. The secret is simple: read a little every day. Even fifteen minutes of daily reading can transform your vocabulary, your imagination, and your understanding of the world.',
+        'Do not worry about understanding every single word. When you encounter an unfamiliar word, let your curiosity guide you. Look it up, learn its meaning, and add it to your wordbook. Each new word is a small victory.',
+        'Chapter 3: Words Are Tools',
+        'Think of words as tools in a toolbox. A carpenter would not try to build a house with only a hammer. In the same way, you need a variety of words to express yourself clearly and effectively.',
+        'The more words you know, the more precisely you can think. Studies show that vocabulary size is closely linked to academic success, career advancement, and even emotional intelligence.',
+        'As you read this book, tap on any word you do not know. The translation popup will appear instantly. Click the button to add it to your wordbook, and review it later with the flashcard mode.',
+        'Chapter 4: Your Journey Begins',
+        'You are now ready to begin your own journey with words. Remember: consistency beats intensity. Read a little every day, mark the words that matter to you, and review them regularly.',
+        'The wonderful world of words is waiting for you. Open your heart to it, and it will open its treasures to you. Happy reading!'
+      ],
+      chapters: [
+        { title: 'Chapter 1: The Magic of Words', start: 0 },
+        { title: 'Chapter 2: The Power of Reading', start: 4 },
+        { title: 'Chapter 3: Words Are Tools', start: 7 },
+        { title: 'Chapter 4: Your Journey Begins', start: 11 }
+      ]
+    };
+    await dbPutBook(sample);
+    await loadBooks();
+  }
+
+  // 如果有书籍，加载第一本
+  if (state.books.length > 0) {
+    // 不自动打开，让用户自己选择
+  }
+
+  showToast('✅ 务思语已就绪，选择书籍开始阅读', 'success');
+
+  // 猴子补丁：在单词/句子翻译弹窗中加入「加入单词本」按钮
+  const _origShowWP = showWordPopup;
+  showWordPopup = async function(word, event) {
+    await _origShowWP(word, event);
+    addWbButtonToPopup(word, detectType(word));
+  };
+  const _origTransSel = translateSelection;
+  translateSelection = async function() {
+    await _origTransSel();
+    const text = el.sentenceBtn.dataset.text || state.currentWord || '';
+    addWbButtonToPopup(text, detectType(text));
+  };
+  // 加载配色偏好
+  const wbTheme = localStorage.getItem('wusiyu_wbTheme') || 'classic';
+  document.documentElement.setAttribute('data-wb-theme', wbTheme);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "appId": "com.wusiyu.reader",
+  "appName": "务思语",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#fafaf9"
+  }
+}
