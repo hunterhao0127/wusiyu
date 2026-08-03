@@ -74,3 +74,26 @@ Thumbs.db
 
 # ═══ 备份文件变体 ═══
 *.bak*
+
+# ═══ 用户数据保护（绝不能上传） ═══
+# 书籍文件（用户导入的电子书）
+*.epub
+*.pdf
+*.docx
+*.mobi
+*.azw3
+**/books/*
+!**/books/*.txt
+
+# 单词本/阅读历史/用户数据
+wordbook*.json
+history*.json
+**/data/*.json
+**/data/*.db
+*.sqlite
+*.sqlite3
+
+# API 密钥文件（含变体）
+*api_key*
+*apikey*
+secrets.json
