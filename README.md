@@ -54,15 +54,15 @@
 │   ├── app.py             # Flask 后端（书籍解析 + 服务）
 │   ├── static/index.html  # 前端（阅读器 + 翻译 + 单词本）
 │   └── installer/         # 安装程序（自动检测原位置更新）
-├── 02-Electron版/         # Electron 原生窗口版（Windows）
+├── 01-Windows版/         # Electron 原生窗口版（Windows）
 │   ├── main.js            # Electron 主进程
 │   ├── install_electron.py# 安装程序
 │   └── flask-app/         # Flask 后端
-├── 03-Mac版/              # macOS 版项目
+├── 02-Mac版/              # macOS 版项目
 │   ├── main.js            # Electron 主进程
 │   ├── build-mac.sh       # 一键构建脚本
 │   └── flask-app/         # Flask 后端源码
-└── 04-Android版/             # 华为Android版
+└── 03-Android版/             # 华为Android版
     ├── www/               # 纯前端（JS 解析 TXT/EPUB/PDF/DOCX）
     └── capacitor.config.json
 ```
@@ -88,7 +88,7 @@ python app.py
 ### macOS
 
 ```bash
-cd 03-Mac版
+cd 02-Mac版
 pip3 install flask requests
 npm install
 npm run build-mac   # 生成 .dmg 安装包
@@ -97,7 +97,7 @@ npm run build-mac   # 生成 .dmg 安装包
 ### 华为平板
 
 ```bash
-cd 04-Android版
+cd 03-Android版
 # 用 Capacitor 打包 APK（需要 Android SDK）
 npx cap add android
 npx cap sync android

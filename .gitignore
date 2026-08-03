@@ -39,16 +39,16 @@ _internal/
 !**/installer/*.txt
 
 # ═══ Electron 版的 Flask 打包副本（源码在 01/03 版） ═══
-02-Electron版/flask-app/
+01-Windows版/flask-app/
 **/flask-app/_internal/
 **/flask-app/*.exe
 
 # ═══ 安卓构建副本（大文件） ═══
-04-Android版/android构建/
-04-Android版/android/
+03-Android版/android构建/
+03-Android版/android/
 
 # ═══ 已安装副本（Electron 安装目录，大文件） ═══
-05-已安装副本/
+04-已安装副本/
 
 # ═══ 系统 ═══
 .DS_Store
@@ -61,3 +61,16 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# 本地备份（含敏感配置，不上传）
+05-备份/
+
+# ═══ 构建工具（SDK/Gradle/JDK，数 GB） ═══
+06-构建工具/
+**/06-构建工具/
+
+# ═══ 图标设计素材 ═══
+图标方案/
+
+# ═══ 备份文件变体 ═══
+*.bak*
