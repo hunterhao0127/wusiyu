@@ -97,3 +97,6 @@ history*.json
 *api_key*
 *apikey*
 secrets.json
+
+# ═══ APK 构建产物（只发 Release，不入仓库） ═══
+*.apk
