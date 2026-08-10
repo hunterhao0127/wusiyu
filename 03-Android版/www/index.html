@@ -3134,10 +3134,22 @@ async function uploadFiles(files) {
 (async function init() {
   // 📚 冷启动传书兜底：微信/文件管理器打开时原生先把路径写入
   // window.__pendingImportPath（WebView 未就绪也能写入），页面加载完成后再检查
-  if (window.__pendingImportPath) {
-    const pendingPath = window.__pendingImportPath;
-    window.__pendingImportPath = null;
-    try { await importBookFromPath(pendingPath); } catch (e) { console.error('导入失败', e); }
+  // 轮询 10 次（20 秒），覆盖原生 evaluateJavascript 较晚到达的情况
+  let pendingChecked = 0;
+  const tryPendingImport = async () => {
+    if (window.__pendingImportPath) {
+      const pendingPath = window.__pendingImportPath;
+      window.__pendingImportPath = null;
+      try { await importBookFromPath(pendingPath); return true; }
+      catch (e) { console.error('导入失败', e); return true; }
+    }
+    return false;
+  };
+  if (!(await tryPendingImport())) {
+    const timer = setInterval(async () => {
+      pendingChecked++;
+      if (await tryPendingImport() || pendingChecked >= 10) clearInterval(timer);
+    }, 2000);
   }
 
   // 加载本地偏好
