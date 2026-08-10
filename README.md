@@ -2,6 +2,8 @@
 
 > 一个支持 **Windows / macOS / Android / 网页版** 四端的英语阅读器，内置 AI 翻译、单词本、背单词记忆曲线，让英语阅读像微信一样轻快自然。
 
+[![🚀 在线体验网页版（点击直达）](https://img.shields.io/badge/%F0%9F%9A%80_%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C_%E7%BD%91%E9%A1%B5%E7%89%88-%E7%82%B9%E5%87%BB%E7%9B%B4%E8%BE%BE-2ea44f?style=for-the-badge)](https://hunterhao0127.github.io/wusiyu/)
+
 ![version](https://img.shields.io/badge/version-1.5.5-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android%20%7C%20Web-green)
 ![license](https://img.shields.io/badge/license-MIT-orange)
