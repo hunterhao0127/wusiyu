@@ -1,10 +1,23 @@
 # 📖 务思语 — 英语沉浸阅读器
 
-> 一个支持 **Windows / macOS / 华为平板** 三端的英语阅读器，内置 AI 翻译、单词本、背单词记忆曲线，让英语阅读像微信一样轻快自然。
+> 一个支持 **Windows / macOS / Android / 网页版** 四端的英语阅读器，内置 AI 翻译、单词本、背单词记忆曲线，让英语阅读像微信一样轻快自然。
 
-![version](https://img.shields.io/badge/version-1.5.1-blue)
-![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-green)
+![version](https://img.shields.io/badge/version-1.5.5-blue)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android%20%7C%20Web-green)
 ![license](https://img.shields.io/badge/license-MIT-orange)
+
+---
+
+## 🌐 网页版（无需安装，任何设备直接访问）
+
+> 浏览器打开即用：`https://hunterhao0127.github.io/wusiyu/`
+
+- 手机 / 平板 / 电脑浏览器直接访问，**无需安装任何 App**
+- 支持 TXT · EPUB · PDF · DOCX · HTML 导入
+- 🔒 **隐私保障**：你的书籍、API Key、单词本、背单词记录**只存在你自己的浏览器里**（IndexedDB / localStorage），
+  - 不上传任何服务器，GitHub 只托管网页程序本身
+  - API Key 由你的浏览器**直接发送给你选择的 AI 厂商**（DeepSeek / 千问 / OpenAI / Gemini / Claude / Kimi / 智谱 / 自定义），任何人（包括站长）都看不到
+  - 换浏览器或清除浏览器数据后需重新导入（纯前端设计，无账号体系）
 
 ---
 

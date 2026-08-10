@@ -586,7 +586,7 @@ def api_test_config():
 def start_flask():
     """在子线程启动 Flask 服务"""
     os.makedirs(BOOKS_DIR, exist_ok=True)
-    app.run(host='127.0.0.1', port=5980, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=5980, debug=False, use_reloader=False)
 
 
 if __name__ == '__main__':

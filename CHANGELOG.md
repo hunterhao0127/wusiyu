@@ -1,5 +1,12 @@
 # 更新日志
 
+## 🌐 网页版 (2026-08-03)
+
+### ✨ 新增访问方式（不影响已有 Windows / macOS / Android 版本）
+- 纯前端网页版：浏览器直接访问，无需安装，任何设备可用
+- 数据只存使用者自己的浏览器（IndexedDB / localStorage），API Key 直连厂商，无任何服务器存储
+- 上线地址：https://hunterhao0127.github.io/wusiyu/
+
 ## v1.5.5 (2026-08-03)
 
 ### 🔧 Android 传书导入加强 + 诊断版
