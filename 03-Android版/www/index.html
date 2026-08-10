@@ -1699,9 +1699,13 @@ async function parseEpub(file) {
   const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
 
   const manifest = {};
-  const manRegex = /<item\s+[^>]*id="([^"]+)"[^>]*href="([^"]+)"/g;
+  // 兼容两种属性顺序: <item id="x" href="y"> 和 <item href="y" id="x">
+  const manRegex = /<item\s+[^>]*(?:id="([^"]+)"[^>]*href="([^"]+)"|href="([^"]+)"[^>]*id="([^"]+)")[^>]*>/g;
   let m;
-  while ((m = manRegex.exec(opfXml)) !== null) manifest[m[1]] = m[2];
+  while ((m = manRegex.exec(opfXml)) !== null) {
+    if (m[1] !== undefined) manifest[m[1]] = m[2];
+    else manifest[m[4]] = m[3];
+  }
 
   const spineIds = [];
   const spineRegex = /<itemref\s+[^>]*idref="([^"]+)"/g;
@@ -1763,9 +1767,9 @@ async function importBookFromPath(path) {
     return;
   }
   try {
-    const { Filesystem, Encoding } = window.Capacitor.Plugins;
-    // 读为 base64（支持二进制格式）
-    const result = await Filesystem.readFile({ path, encoding: Encoding.BASE64 });
+    const { Filesystem } = window.Capacitor.Plugins;
+    // 不传 encoding → 插件自动返回 base64 编码（Android 原生：charset=null 时走 readFileAsBase64EncodedData）
+    const result = await Filesystem.readFile({ path });
     const bin = atob(result.data);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -3128,6 +3132,14 @@ async function uploadFiles(files) {
   }
 }
 (async function init() {
+  // 📚 冷启动传书兜底：微信/文件管理器打开时原生先把路径写入
+  // window.__pendingImportPath（WebView 未就绪也能写入），页面加载完成后再检查
+  if (window.__pendingImportPath) {
+    const pendingPath = window.__pendingImportPath;
+    window.__pendingImportPath = null;
+    try { await importBookFromPath(pendingPath); } catch (e) { console.error('导入失败', e); }
+  }
+
   // 加载本地偏好
   const savedTheme = localStorage.getItem('wusiyu_theme') || 'light';
   const savedFontSize = parseInt(localStorage.getItem('wusiyu_fontSize')) || 18;
