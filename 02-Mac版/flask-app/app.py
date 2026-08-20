@@ -6,12 +6,12 @@ Flask 后端: 书籍解析 + AI 翻译 (DeepSeek API)
 import os
 import re
 import json
-import glob
 import sys
-import webbrowser
-import threading
+import base64
+import mimetypes
+import posixpath
 import requests
-from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, send_from_directory
 
 # ─── PyInstaller 打包路径支持 ─────────────────────────
 def base_path():
@@ -31,12 +31,12 @@ def resource_path(relative_path):
 app = Flask(__name__, static_folder=resource_path('static'), static_url_path='')
 
 # ─── 配置 ────────────────────────────────────────────────────
-# 书籍和配置存在 exe 旁边（用户数据）
-APP_DIR = base_path()
+# 书籍和配置存在用户数据目录；打包后 app bundle 资源目录可能不可写。
+APP_DIR = os.environ.get('WUSIYU_DATA_DIR') or base_path()
 BOOKS_DIR = os.path.join(APP_DIR, 'books')
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 VERSION_FILE = os.path.join(APP_DIR, '务思语_version.txt')
-APP_VERSION = "1.5.2"
+APP_VERSION = "1.5.5"
 
 DEFAULT_CONFIG = {
     "api_key": "",
@@ -66,70 +66,159 @@ def save_config(cfg):
 
 # ─── 书籍解析 ────────────────────────────────────────────────
 
-def parse_txt(filepath):
-    """解析 TXT 文件，按空行分段落"""
-    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-        text = f.read()
+SENTENCE_END_RE = re.compile(r'(?<=[.!?。！？])\s+')
 
-    # 按两个以上换行分割为段落
-    paragraphs = re.split(r'\n\s*\n', text)
-    paragraphs = [p.strip() for p in paragraphs if p.strip()]
 
-    # 尝试识别章节标题
-    chapters = detect_chapters(paragraphs)
+def image_data_uri(data, mime=None):
+    """把书内图片转成 data URI，保留图片位置且不需要额外静态文件。"""
+    mime = mime or 'image/png'
+    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
+
+def clean_text(text):
+    """清理无意义缩进/控制字符，保留中英文标点。"""
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace('\ufeff', '').replace('\u00a0', ' ')
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
+    lines = []
+    for line in text.split('\n'):
+        line = re.sub(r'^[\s\u3000¡﹛]+', '', line)
+        line = re.sub(r'\s+', ' ', line).strip()
+        lines.append(line)
+    return '\n'.join(lines).strip()
+
+
+def decode_text_file(filepath):
+    """自动识别 UTF-8 / GBK / ANSI 类文本，避免符号显示成 ����。"""
+    data = open(filepath, 'rb').read()
+    best = None
+    for enc in ['utf-8-sig', 'utf-8', 'gb18030', 'gbk', 'cp1252', 'latin-1']:
+        try:
+            text = data.decode(enc)
+        except UnicodeDecodeError:
+            text = data.decode(enc, errors='replace')
+        score = text.count('\ufffd') * 1000 + text.count('\x00') * 100
+        score += len(re.findall(r'(^|\n)[¡﹛]{2,}', text)) * 20
+        score += text.count('Ã') + text.count('Â')
+        if best is None or score < best[0]:
+            best = (score, enc, text)
+    return clean_text(best[2])
+
+
+def is_chapter_title(text):
+    text = clean_text(text)
+    if not text or len(text) > 90:
+        return False
+    return bool(
+        re.match(r'^(Chapter|Unit|Lesson|Part|Section|Module|Week)\b', text, re.IGNORECASE) or
+        re.match(r'^(Interlude|Prologue|Epilogue|Appendix|Preface|Introduction)\b', text, re.IGNORECASE) or
+        re.match(r'^(插曲|间奏|幕间|番外|序章|终章|附录|前言|引言)', text) or
+        re.match(r'^\d+[\.\s]', text) or
+        (text.isupper() and 3 < len(text) < 80)
+    )
+
+
+def split_long_text(text, limit=900):
+    """把超长段按句子切短，避免一整页只有一个内部滚动段。"""
+    text = clean_text(text)
+    if not text:
+        return []
+    if len(text) <= limit:
+        return [text]
+    chunks = []
+    buf = ''
+    for part in SENTENCE_END_RE.split(text):
+        part = part.strip()
+        if not part:
+            continue
+        if buf and len(buf) + len(part) + 1 > limit:
+            chunks.append(buf)
+            buf = part
+        else:
+            buf = f"{buf} {part}".strip()
+    if buf:
+        chunks.append(buf)
+    return chunks or [text]
+
+
+def block_from_text(text, block_type=None):
+    text = clean_text(text)
+    if not text:
+        return []
+    kind = block_type or ('heading' if is_chapter_title(text) else 'paragraph')
+    return [{"type": kind, "text": part} for part in split_long_text(text)]
+
+
+def text_blocks_to_paragraphs(blocks):
+    return [b["text"] for b in blocks if b.get("type") in ("paragraph", "heading") and b.get("text")]
+
+
+def finalize_book(title, blocks):
+    paragraphs = text_blocks_to_paragraphs(blocks)
     return {
-        "title": os.path.splitext(os.path.basename(filepath))[0],
+        "title": title,
+        "blocks": blocks,
         "paragraphs": paragraphs,
-        "chapters": chapters,
+        "chapters": detect_chapters(paragraphs),
         "total": len(paragraphs)
     }
+
+def parse_txt(filepath):
+    """解析 TXT 文件，自动识别编码；无空行时按行分段。"""
+    text = decode_text_file(filepath)
+    raw_parts = re.split(r'\n\s*\n', text) if re.search(r'\n\s*\n', text) else text.split('\n')
+    blocks = []
+    for part in raw_parts:
+        blocks.extend(block_from_text(part))
+    return finalize_book(os.path.splitext(os.path.basename(filepath))[0], blocks)
 
 
 def parse_epub(filepath):
     """解析 EPUB 文件"""
     from ebooklib import epub
     book = epub.read_epub(filepath)
+    from ebooklib import ITEM_DOCUMENT, ITEM_IMAGE
+    from bs4 import BeautifulSoup
 
-    paragraphs = []
-    title = os.path.splitext(os.path.basename(filepath))[0]
+    blocks = []
+    images = {}
+    title = book.get_metadata('DC', 'title')
+    title = title[0][0].strip() if title and title[0] and title[0][0] else os.path.splitext(os.path.basename(filepath))[0]
 
     for item in book.get_items():
-        if item.get_type() == 9:  # ITEM_DOCUMENT
-            content = item.get_body_content().decode('utf-8', errors='replace')
-            # 提取文本
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(content, 'lxml')
-            text = soup.get_text(separator='\n', strip=True)
-            # 按空行分段落
-            parts = re.split(r'\n\s*\n', text)
-            for p in parts:
-                p = p.strip()
-                if p and len(p) > 10:
-                    paragraphs.append(p)
+        if item.get_type() == ITEM_IMAGE:
+            images[item.file_name] = image_data_uri(item.get_content(), item.media_type)
 
-    if not paragraphs:
-        # 兜底：直接取所有文本
+    for item in book.get_items():
+        if item.get_type() == ITEM_DOCUMENT:
+            content = item.get_body_content().decode('utf-8', errors='replace')
+            soup = BeautifulSoup(content, 'lxml')
+            for tag in soup(['script', 'style']):
+                tag.decompose()
+            for node in soup.find_all(['h1', 'h2', 'h3', 'h4', 'p', 'blockquote', 'li', 'img']):
+                if node.name == 'img':
+                    src = (node.get('src') or '').split('#')[0]
+                    key = posixpath.normpath(posixpath.join(posixpath.dirname(item.file_name), src))
+                    if key in images:
+                        blocks.append({"type": "image", "src": images[key], "alt": node.get('alt') or ""})
+                    continue
+                text = clean_text(node.get_text(' ', strip=True))
+                min_len = 2 if node.name.startswith('h') else 8
+                if text and len(text) >= min_len:
+                    blocks.extend(block_from_text(text, 'heading' if node.name.startswith('h') else None))
+
+    if not text_blocks_to_paragraphs(blocks):
         for item in book.get_items():
-            if item.get_type() == 9:
+            if item.get_type() == ITEM_DOCUMENT:
                 content = item.get_body_content().decode('utf-8', errors='replace')
-                from bs4 import BeautifulSoup
                 soup = BeautifulSoup(content, 'lxml')
                 text = soup.get_text(separator=' ', strip=True)
                 sentences = re.split(r'(?<=[.!?])\s+', text)
                 for s in sentences:
-                    s = s.strip()
-                    if s and len(s) > 15:
-                        paragraphs.append(s)
+                    if clean_text(s) and len(clean_text(s)) > 15:
+                        blocks.extend(block_from_text(s))
 
-    chapters = detect_chapters(paragraphs)
-
-    return {
-        "title": title,
-        "paragraphs": paragraphs,
-        "chapters": chapters,
-        "total": len(paragraphs)
-    }
+    return finalize_book(title, blocks)
 
 
 def parse_pdf(filepath):
@@ -137,30 +226,32 @@ def parse_pdf(filepath):
     import fitz  # PyMuPDF
     doc = fitz.open(filepath)
 
-    paragraphs = []
-    title = os.path.splitext(os.path.basename(filepath))[0]
+    blocks_out = []
+    metadata_title = (doc.metadata or {}).get('title', '').strip()
+    title = metadata_title or os.path.splitext(os.path.basename(filepath))[0]
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
-        text = page.get_text("text", sort=True)
-        if not text or not text.strip():
-            continue
-        # 按空行分段落
-        parts = re.split(r'\n\s*\n', text)
-        for p in parts:
-            p = p.strip()
-            if p and len(p) > 10:
-                paragraphs.append(p)
+        blocks_out.append({"type": "heading", "text": f"第 {page_num + 1} 页"})
+        for block in page.get_text("dict", sort=True).get("blocks", []):
+            if block.get("type") == 1 and block.get("image"):
+                ext = block.get("ext") or "png"
+                mime = mimetypes.types_map.get(f".{ext.lower()}", "image/png")
+                blocks_out.append({"type": "image", "src": image_data_uri(block["image"], mime), "alt": f"Page {page_num + 1} image"})
+                continue
+            if block.get("type") != 0:
+                continue
+            lines = []
+            for line in block.get("lines", []):
+                line_text = ''.join(span.get("text", "") for span in line.get("spans", []))
+                if clean_text(line_text):
+                    lines.append(clean_text(line_text))
+            text = clean_text(' '.join(lines))
+            if text and len(text) > 8:
+                blocks_out.extend(block_from_text(text))
 
     doc.close()
-    chapters = detect_chapters(paragraphs)
-
-    return {
-        "title": title,
-        "paragraphs": paragraphs,
-        "chapters": chapters,
-        "total": len(paragraphs)
-    }
+    return finalize_book(title, blocks_out)
 
 
 def parse_docx(filepath):
@@ -168,27 +259,28 @@ def parse_docx(filepath):
     from docx import Document
     doc = Document(filepath)
 
-    paragraphs = []
+    blocks = []
+    ns = {
+        'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
+        'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+    }
     for p in doc.paragraphs:
-        text = p.text.strip()
+        text = clean_text(p.text)
         if text and len(text) > 5:
-            paragraphs.append(text)
+            blocks.extend(block_from_text(text))
+        for blip in p._element.findall('.//a:blip', ns):
+            rid = blip.get(f'{{{ns["r"]}}}embed')
+            if rid and rid in doc.part.related_parts:
+                part = doc.part.related_parts[rid]
+                blocks.append({"type": "image", "src": image_data_uri(part.blob, part.content_type), "alt": ""})
 
     title = os.path.splitext(os.path.basename(filepath))[0]
-    chapters = detect_chapters(paragraphs)
-
-    return {
-        "title": title,
-        "paragraphs": paragraphs,
-        "chapters": chapters,
-        "total": len(paragraphs)
-    }
+    return finalize_book(title, blocks)
 
 
 def parse_html(filepath):
     """解析 HTML/HTM 文件"""
-    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-        content = f.read()
+    content = decode_text_file(filepath)
 
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(content, 'lxml')
@@ -197,22 +289,26 @@ def parse_html(filepath):
     for tag in soup(['script', 'style', 'nav', 'footer', 'header']):
         tag.decompose()
 
-    text = soup.get_text(separator='\n', strip=True)
-    paragraphs = []
-    for line in text.split('\n'):
-        line = line.strip()
-        if line and len(line) > 10:
-            paragraphs.append(line)
+    blocks = []
+    base_dir = os.path.dirname(os.path.realpath(filepath))
+    for node in soup.find_all(['h1', 'h2', 'h3', 'h4', 'p', 'blockquote', 'li', 'img']):
+        if node.name == 'img':
+            src = node.get('src') or ''
+            if src.startswith('data:') or src.startswith('http://') or src.startswith('https://'):
+                blocks.append({"type": "image", "src": src, "alt": node.get('alt') or ""})
+                continue
+            img_path = os.path.realpath(os.path.join(base_dir, src))
+            if img_path.startswith(base_dir + os.sep) and os.path.exists(img_path):
+                mime = mimetypes.guess_type(img_path)[0] or 'image/png'
+                with open(img_path, 'rb') as f:
+                    blocks.append({"type": "image", "src": image_data_uri(f.read(), mime), "alt": node.get('alt') or ""})
+            continue
+        text = clean_text(node.get_text(' ', strip=True))
+        if text and len(text) > (2 if node.name.startswith('h') else 8):
+            blocks.extend(block_from_text(text, 'heading' if node.name.startswith('h') else None))
 
     title = os.path.splitext(os.path.basename(filepath))[0]
-    chapters = detect_chapters(paragraphs)
-
-    return {
-        "title": title,
-        "paragraphs": paragraphs,
-        "chapters": chapters,
-        "total": len(paragraphs)
-    }
+    return finalize_book(title, blocks)
 
 
 def detect_chapters(paragraphs):
@@ -220,12 +316,7 @@ def detect_chapters(paragraphs):
     chapters = []
     current_chapter = {"title": "开头", "start": 0}
     for i, p in enumerate(paragraphs):
-        # 匹配各种章节标题模式
-        if re.match(r'^(Chapter|Unit|Lesson|Part|Section|CHAPTER|Module|Week)', p, re.IGNORECASE) or \
-           re.match(r'^(Interlude|Prologue|Epilogue|Appendix|Preface|Introduction)', p, re.IGNORECASE) or \
-           re.match(r'^(插曲|间奏|幕间|番外|序章|终章|附录|前言|引言)', p) or \
-           re.match(r'^\d+[\.\s]', p) or \
-           (re.match(r'^[A-Z][a-z]+\s', p) and len(p) < 60 and len(p) > 3):
+        if is_chapter_title(p):
             if current_chapter["start"] < i:
                 chapters.append(dict(current_chapter))
             current_chapter = {"title": p, "start": i}
@@ -246,21 +337,24 @@ SUPPORTED_FORMATS = {
 
 def list_books():
     """列出所有书籍文件"""
-    supported = list(SUPPORTED_FORMATS.keys())
     books = []
-    for pattern in ['*' + e for e in supported]:
-        for f in glob.glob(os.path.join(BOOKS_DIR, pattern)):
-            name = os.path.splitext(os.path.basename(f))[0]
-            ext = os.path.splitext(os.path.basename(f))[1].lower()
-            size = os.path.getsize(f)
-            books.append({
-                "name": name,
-                "filename": os.path.basename(f),
-                "ext": ext,
-                "format_label": SUPPORTED_FORMATS.get(ext, '📄'),
-                "size": size,
-                "size_str": format_size(size)
-            })
+    if not os.path.isdir(BOOKS_DIR):
+        return books
+    for filename in os.listdir(BOOKS_DIR):
+        f = os.path.join(BOOKS_DIR, filename)
+        ext = os.path.splitext(filename)[1].lower()
+        if not os.path.isfile(f) or ext not in SUPPORTED_FORMATS:
+            continue
+        name = os.path.splitext(filename)[0]
+        size = os.path.getsize(f)
+        books.append({
+            "name": name,
+            "filename": filename,
+            "ext": ext,
+            "format_label": SUPPORTED_FORMATS.get(ext, '📄'),
+            "size": size,
+            "size_str": format_size(size)
+        })
     return books
 
 
@@ -325,7 +419,7 @@ def translate_word(word, mode="simple", config=None):
     if config is None:
         config = load_config()
 
-    word = word.strip().strip(",.!?;:\"'()[]{}").strip()
+    word = word.strip().strip(",.!?;:\"'“”‘’()[]{}<>，。！？；：（）【】《》").strip()
     if not word or len(word) > 50:
         return {"error": "无效的单词"}
 
@@ -480,7 +574,11 @@ def api_upload_book():
     if file.filename == '':
         return jsonify({"success": False, "error": "文件名为空"}), 400
 
-    ext = os.path.splitext(file.filename)[1].lower()
+    safe_name = os.path.basename(file.filename.replace('\\', '/'))
+    if not safe_name:
+        return jsonify({"success": False, "error": "文件名为空"}), 400
+
+    ext = os.path.splitext(safe_name)[1].lower()
     if ext not in SUPPORTED_FORMATS:
         return jsonify({
             "success": False,
@@ -489,8 +587,10 @@ def api_upload_book():
 
     # 保存到 books 目录
     import time
-    safe_name = file.filename
     save_path = os.path.join(BOOKS_DIR, safe_name)
+    real_books_dir = os.path.realpath(BOOKS_DIR)
+    if not os.path.realpath(save_path).startswith(real_books_dir + os.sep):
+        return jsonify({"success": False, "error": "不允许的路径"}), 403
 
     # 如果已存在，加时间戳
     if os.path.exists(save_path):
@@ -586,10 +686,14 @@ def api_test_config():
 def start_flask():
     """在子线程启动 Flask 服务"""
     os.makedirs(BOOKS_DIR, exist_ok=True)
-    app.run(host='0.0.0.0', port=5980, debug=False, use_reloader=False)
+    app.run(host='127.0.0.1', port=5980, debug=False, use_reloader=False)
 
 
 if __name__ == '__main__':
+    if os.environ.get('WUSIYU_ELECTRON') == '1':
+        start_flask()
+        raise SystemExit(0)
+
     import threading
     import time
 
