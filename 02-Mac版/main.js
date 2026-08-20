@@ -6,42 +6,49 @@ const fs = require('fs');
 
 let mainWindow = null;
 let flaskProcess = null;
+const SERVER_URL = 'http://127.0.0.1:5980';
 
 function getFlaskDir() {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'flask-app');
-  } else {
-    return path.join(__dirname, 'flask-app');
-  }
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'backend')
+    : path.join(__dirname, 'flask-app');
 }
 
-function getPythonCmd() {
-  // macOS 上依次尝试
+function getBackendCommand(flaskDir) {
+  if (app.isPackaged) {
+    const backend = path.join(flaskDir, 'wusiyu_backend');
+    if (fs.existsSync(backend)) return { cmd: backend, args: [] };
+  }
+
+  const appPy = path.join(flaskDir, 'app.py');
   const candidates = ['python3', 'python'];
   for (const cmd of candidates) {
     try {
       require('child_process').execSync(`${cmd} --version`, { stdio: 'ignore' });
-      return cmd;
+      return { cmd, args: [appPy] };
     } catch(e) {}
   }
-  return 'python3'; // 默认
+  return { cmd: 'python3', args: [appPy] };
 }
 
 function startFlask() {
   return new Promise((resolve, reject) => {
     const flaskDir = getFlaskDir();
-    const pythonCmd = getPythonCmd();
-    const appPy = path.join(flaskDir, 'app.py');
+    const backend = getBackendCommand(flaskDir);
 
-    if (!fs.existsSync(appPy)) {
-      reject(new Error(`找不到 Flask 后端: ${appPy}`));
+    if (!fs.existsSync(flaskDir)) {
+      reject(new Error(`找不到 Flask 后端目录: ${flaskDir}`));
       return;
     }
 
-    flaskProcess = spawn(pythonCmd, [appPy], {
+    flaskProcess = spawn(backend.cmd, backend.args, {
       cwd: flaskDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, WUSIYU_ELECTRON: '1' }
+      env: {
+        ...process.env,
+        WUSIYU_ELECTRON: '1',
+        WUSIYU_DATA_DIR: app.getPath('userData')
+      }
     });
 
     flaskProcess.stdout.on('data', (data) => console.log(`[Flask] ${data}`));
@@ -53,12 +60,12 @@ function startFlask() {
     let retries = 0;
     const check = () => {
       retries++;
-      http.get('http://localhost:5980/api/books', (res) => {
+      http.get(`${SERVER_URL}/api/books`, (res) => {
         if (res.statusCode === 200) resolve();
-        else if (retries < 30) setTimeout(check, 500);
+        else if (retries < 80) setTimeout(check, 500);
         else reject(new Error('超时'));
       }).on('error', () => {
-        if (retries < 30) setTimeout(check, 500);
+        if (retries < 80) setTimeout(check, 500);
         else reject(new Error('超时'));
       });
     };
@@ -87,7 +94,7 @@ function createWindow() {
     backgroundColor: '#fafaf9'
   });
 
-  mainWindow.loadURL('http://localhost:5980');
+  mainWindow.loadURL(SERVER_URL);
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 }
@@ -100,17 +107,26 @@ app.whenReady().then(async () => {
     createWindow();
   } catch (err) {
     console.error('启动失败:', err);
-    app.quit();
+    createWindow();
   }
 });
 
 app.on('window-all-closed', () => {
-  stopFlask();
-  if (process.platform !== 'darwin') app.quit();
+  if (process.platform !== 'darwin') {
+    stopFlask();
+    app.quit();
+  }
 });
 
-app.on('activate', () => {
-  if (mainWindow === null) createWindow();
+app.on('activate', async () => {
+  if (mainWindow === null) {
+    try {
+      if (!flaskProcess) await startFlask();
+      createWindow();
+    } catch (err) {
+      console.error('启动失败:', err);
+    }
+  }
 });
 
 app.on('before-quit', () => stopFlask());
