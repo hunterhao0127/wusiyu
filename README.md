@@ -10,6 +10,25 @@
 
 ---
 
+## 🚀 快速下载 / 安装
+
+| 使用方式 | 入口 | 适合 |
+|---------|------|------|
+| 网页版 | [在线打开](https://hunterhao0127.github.io/wusiyu/) | 不想安装，直接体验 |
+| macOS 版 | [Releases 下载页](https://github.com/hunterhao0127/wusiyu/releases) | 想安装为 Mac 原生窗口应用 |
+| 源码包 | [Download ZIP](https://github.com/hunterhao0127/wusiyu/archive/refs/heads/main.zip) | 想自己构建或二次开发 |
+
+macOS 源码构建：
+
+```bash
+cd 02-Mac版
+bash build-mac.sh
+```
+
+构建完成后，安装包在 `dist/务思语-1.5.5-arm64.dmg`。仓库不提交 `.dmg`、书籍、API Key、单词本和阅读历史；这些都只保存在用户本机。
+
+---
+
 ## 🌐 网页版（无需安装，任何设备直接访问）
 
 > 浏览器打开即用：`https://hunterhao0127.github.io/wusiyu/`
