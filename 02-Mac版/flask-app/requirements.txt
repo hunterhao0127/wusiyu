@@ -1,2 +1,7 @@
 flask>=3.0
 requests>=2.28
+beautifulsoup4>=4.12
+ebooklib>=0.18
+lxml>=5.0
+pymupdf>=1.23
+python-docx>=1.1
