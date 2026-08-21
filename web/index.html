@@ -1313,6 +1313,9 @@ body {
     </div>
     <label>API Key（按上方服务商填对应 key）</label>
     <input type="password" id="apiKey" placeholder="sk-..." />
+    <div style="margin-top:6px;font-size:13px;line-height:1.55;color:var(--text-secondary);">
+      🔒 网页版只保存在本机浏览器：API Key、导入书籍、单词本和阅读记录都不会上传到服务器。
+    </div>
     <div style="margin-top:6px;display:flex;gap:8px;">
       <button class="btn-primary" onclick="saveApiKey()" style="flex:1;">保存并测试</button>
     </div>
@@ -2379,11 +2382,12 @@ function renderPage() {
 
 function rememberPageBoundary(start, end) {
   let idx = state.pageStarts.indexOf(start);
-  if (idx === -1) {
-    idx = state.pageStarts.findIndex(p => p > start);
-    if (idx === -1) idx = state.pageStarts.length;
-    state.pageStarts.splice(idx, 0, start);
-    state.pageEnds.splice(idx, 0, end);
+  if (idx === -1 && start === (state.pageEnds[state.pageEnds.length - 1] || 0)) {
+    idx = state.pageStarts.length;
+    state.pageStarts.push(start);
+    state.pageEnds.push(end);
+  } else if (idx === -1) {
+    return;
   }
   state.pageEnds[idx] = end;
   if (end < state.blocks.length && state.pageStarts[idx + 1] !== end) {
