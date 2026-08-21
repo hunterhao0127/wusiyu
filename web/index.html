@@ -834,27 +834,37 @@ body {
 }
 
 /* ═══ 标记下划线（3 套配色） ═══ */
+.wb-highlight-word,
+.wb-highlight-phrase,
+.wb-highlight-sentence {
+  --wb-line-color: rgba(214, 137, 16, .82);
+  text-decoration: none;
+  padding-bottom: .12em;
+  background-image: linear-gradient(var(--wb-line-color), var(--wb-line-color));
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
+  background-position: 0 100%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 /* 方案1 - 经典（默认） */
 [data-wb-theme="classic"] .wb-highlight-word,
-.wb-highlight-word { text-decoration: underline #E6A817 wavy 2px; text-underline-offset: 3px; }
+.wb-highlight-word { --wb-line-color: rgba(214, 137, 16, .82); }
 [data-wb-theme="classic"] .wb-highlight-phrase,
-.wb-highlight-phrase { text-decoration: underline #2E8B57 wavy 2px; text-underline-offset: 3px; }
+.wb-highlight-phrase { --wb-line-color: rgba(35, 134, 84, .78); }
 [data-wb-theme="classic"] .wb-highlight-sentence,
-.wb-highlight-sentence { text-decoration: underline #3B82F6 wavy 2px; text-underline-offset: 3px; }
+.wb-highlight-sentence { --wb-line-color: rgba(37, 99, 235, .72); }
 
 /* 方案2 - 温和 */
-[data-wb-theme="gentle"] .wb-highlight-word { text-decoration: underline #F97316 wavy 2px; text-underline-offset: 3px; }
-[data-wb-theme="gentle"] .wb-highlight-phrase { text-decoration: underline #8B5CF6 wavy 2px; text-underline-offset: 3px; }
-[data-wb-theme="gentle"] .wb-highlight-sentence { text-decoration: underline #06B6D4 wavy 2px; text-underline-offset: 3px; }
+[data-wb-theme="gentle"] .wb-highlight-word { --wb-line-color: rgba(234, 88, 12, .62); }
+[data-wb-theme="gentle"] .wb-highlight-phrase { --wb-line-color: rgba(124, 58, 237, .58); }
+[data-wb-theme="gentle"] .wb-highlight-sentence { --wb-line-color: rgba(8, 145, 178, .58); }
 
 /* 方案3 - 极简 */
-[data-wb-theme="minimal"] .wb-highlight-word { text-decoration: underline #EF4444 solid 2px; text-underline-offset: 3px; }
-[data-wb-theme="minimal"] .wb-highlight-phrase { text-decoration: underline #3B82F6 solid 2px; text-underline-offset: 3px; }
-[data-wb-theme="minimal"] .wb-highlight-sentence { text-decoration: underline #6B7280 solid 2px; text-underline-offset: 3px; }
-
-[data-theme="dark"] .wb-highlight-word,
-[data-theme="dark"] .wb-highlight-phrase,
-[data-theme="dark"] .wb-highlight-sentence { text-decoration-style: solid; }
+[data-wb-theme="minimal"] .wb-highlight-word { --wb-line-color: rgba(239, 68, 68, .72); }
+[data-wb-theme="minimal"] .wb-highlight-phrase { --wb-line-color: rgba(59, 130, 246, .68); }
+[data-wb-theme="minimal"] .wb-highlight-sentence { --wb-line-color: rgba(107, 114, 128, .72); }
 
 /* ═══ 单词本面板 ═══ */
 .wb-panel {
