@@ -838,14 +838,11 @@ body {
 .wb-highlight-phrase,
 .wb-highlight-sentence {
   --wb-line-color: rgba(214, 137, 16, .82);
-  text-decoration: none;
-  padding-bottom: .12em;
-  background-image: linear-gradient(var(--wb-line-color), var(--wb-line-color));
-  background-repeat: no-repeat;
-  background-size: 100% 2px;
-  background-position: 0 100%;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
+  text-decoration-line: underline;
+  text-decoration-color: var(--wb-line-color);
+  text-decoration-thickness: 2px;
+  text-underline-offset: .16em;
+  text-decoration-skip-ink: none;
 }
 
 /* 方案1 - 经典（默认） */
@@ -937,13 +934,6 @@ body {
   margin-top: 2px; font-style: italic;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.wb-item .wb-status {
-  font-size: 11px; padding: 2px 8px;
-  border-radius: 4px; flex-shrink: 0; margin-top: 2px;
-}
-.wb-status-pending { background: #fef3cd; color: #92400e; }
-.wb-status-learning { background: #dbeafe; color: #1e40af; }
-.wb-status-mastered { background: #d1fae5; color: #065f46; }
 .wb-item .wb-del {
   background: none; border: none; color: var(--text-secondary);
   cursor: pointer; font-size: 16px; padding: 2px 4px;
@@ -953,209 +943,6 @@ body {
 .wb-item .wb-del:hover { color: #ef4444; }
 .wb-empty {
   padding: 40px 20px; text-align: center; color: var(--text-secondary); font-size: 14px;
-}
-
-/* ═══ 背单词卡片 ═══ */
-.flash-overlay {
-  position: fixed; inset: 0; z-index: 600;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .25s;
-}
-.flash-overlay.active { opacity: 1; pointer-events: auto; }
-.flash-header {
-  position: fixed; top: 0; left: 0; right: 0;
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--card-bg);
-  border-bottom: 1px solid var(--border);
-  z-index: 10;
-}
-.flash-header .flash-progress { font-size: 14px; color: var(--text-secondary); }
-.flash-close {
-  background: none; border: none; font-size: 20px;
-  color: var(--text-secondary); cursor: pointer;
-}
-.flash-card {
-  width: 90%; max-width: 520px;
-  min-height: 320px;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  padding: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform .3s;
-  user-select: none;
-  position: relative;
-}
-.flash-card.flipped { transform: rotateY(180deg); }
-.flash-card-inner {
-  width: 100%;
-  text-align: center;
-}
-.flash-card .fc-word {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 8px;
-}
-.flash-card .fc-pron {
-  font-size: 16px;
-  color: var(--text-secondary);
-  margin-bottom: 20px;
-}
-.flash-card .fc-trans {
-  font-size: 20px;
-  color: var(--accent);
-  margin-bottom: 12px;
-}
-.flash-card .fc-sentence {
-  font-size: 15px;
-  color: var(--text-secondary);
-  font-style: italic;
-  padding: 12px 16px;
-  background: var(--bg);
-  border-radius: 8px;
-  border-left: 3px solid var(--accent);
-  text-align: left;
-  line-height: 1.6;
-}
-.flash-card .fc-source {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 8px;
-}
-.flash-card .fc-detail-btn {
-  margin-top: 8px;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-  cursor: pointer;
-}
-.flash-card .fc-extra {
-  width: 100%;
-  margin-top: 12px;
-}
-.flash-card .fc-tap-hint {
-  position: absolute;
-  bottom: 16px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  opacity: .6;
-}
-.flash-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
-  align-items: center;
-  justify-content: center;
-}
-.flash-actions button {
-  min-width: 126px;
-  min-height: 52px;
-  padding: 12px 28px;
-  border: none;
-  border-radius: 16px;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, .10);
-  transform: translateY(0) scale(1);
-  transform-origin: center;
-  transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
-  will-change: transform;
-}
-.flash-actions button:focus {
-  outline: none;
-}
-.flash-actions button:hover {
-  transform: translateY(-3px) scale(1.06);
-  box-shadow: 0 14px 26px rgba(15, 23, 42, .16);
-}
-.flash-actions button:active {
-  transform: translateY(0) scale(.98);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, .12);
-}
-.flash-actions button:focus-visible {
-  outline: 3px solid rgba(59, 130, 246, .40);
-  outline-offset: 4px;
-}
-.flash-actions .review-label,
-.flash-actions .review-next {
-  display: block;
-  line-height: 1.25;
-}
-.flash-actions .review-next {
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  opacity: .72;
-}
-.flash-actions .btn-no {
-  background: #fca5a5;
-  color: #7f1d1d;
-}
-.flash-actions .btn-no:hover { background: #f87171; }
-.flash-actions .btn-fuzzy {
-  background: #fcd34d;
-  color: #78350f;
-}
-.flash-actions .btn-fuzzy:hover { background: #fbbf24; }
-.flash-actions .btn-yes {
-  background: #86efac;
-  color: #14532d;
-}
-.flash-actions .btn-yes:hover { background: #4ade80; }
-@media (max-width: 640px) {
-  .flash-actions {
-    gap: 10px;
-  }
-  .flash-actions button {
-    min-width: 96px;
-    min-height: 48px;
-    padding: 10px 14px;
-    border-radius: 14px;
-    font-size: 14px;
-  }
-  .flash-actions .review-next {
-    font-size: 11px;
-  }
-}
-@media (hover: none) {
-  .flash-actions button:hover {
-    transform: none;
-  }
-}
-.flash-done {
-  text-align: center;
-  padding: 40px;
-}
-.flash-done .done-icon { font-size: 64px; margin-bottom: 16px; }
-.flash-done .done-title { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-.flash-done .done-stats { font-size: 15px; color: var(--text-secondary); margin-bottom: 24px; line-height: 1.8; }
-.flash-done .done-btn {
-  padding: 12px 32px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 15px;
-  cursor: pointer;
 }
 
 /* 选中文本的高亮 */
@@ -1256,36 +1043,6 @@ body {
   </div>
   <div class="wb-list" id="wbList">
     <div class="wb-empty">还没有标记任何内容<br>阅读时点击单词或选中句子加入</div>
-  </div>
-  <div style="padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0;">
-    <button class="btn-primary" style="width:100%;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer;" onclick="startFlashcards()">🧠 开始背单词</button>
-  </div>
-</div>
-
-<!-- ═══ 背单词覆盖层 ═══ -->
-<div class="flash-overlay" id="flashOverlay">
-  <div class="flash-header">
-    <span class="flash-progress" id="flashProgress">1 / 10</span>
-    <span style="font-weight:600;color:var(--text);">🧠 背单词</span>
-    <button class="flash-close" onclick="closeFlashcards()">✕</button>
-  </div>
-  <div class="flash-card" id="flashCard" onclick="flipCard(event)">
-    <div class="flash-card-inner" id="flashInner">
-      <div class="fc-word" id="fcWord">magnificent</div>
-      <div class="fc-pron" id="fcPron">/mæɡˈnɪfɪsnt/</div>
-      <div class="fc-tap-hint">👆 点击翻转</div>
-    </div>
-  </div>
-  <div class="flash-actions" id="flashActions" style="display:none;">
-    <button class="btn-no" onclick="flashReview('unknown', this)"><span class="review-label">❌ 不认识</span><span class="review-next" id="reviewNextUnknown">下次：10 分钟后</span></button>
-    <button class="btn-fuzzy" onclick="flashReview('fuzzy', this)"><span class="review-label">❓ 模糊</span><span class="review-next" id="reviewNextFuzzy">下次：1 天后</span></button>
-    <button class="btn-yes" onclick="flashReview('known', this)"><span class="review-label">✅ 知道</span><span class="review-next" id="reviewNextKnown">下次：1 天后</span></button>
-  </div>
-  <div class="flash-done" id="flashDone" style="display:none;">
-    <div class="done-icon">🎉</div>
-    <div class="done-title">完成！</div>
-    <div class="done-stats" id="flashStats"></div>
-    <button class="done-btn" onclick="closeFlashcards()">返回单词本</button>
   </div>
 </div>
 <div class="settings-panel" id="settingsPanel">
@@ -3005,8 +2762,6 @@ function addToWordbook(entry) {
   if (wb[key]) { showToast('已在单词本中', 'error'); return false; }
   entry.id = key;
   entry.addedAt = Date.now();
-  entry.reviews = [];
-  entry.nextReview = Date.now();
   entry.level = 0;
   wb[key] = entry;
   saveWordbook(wb);
@@ -3074,19 +2829,8 @@ function renderWordbookList() {
   }
 
   const typeIcons = { word: '🔤', phrase: '🔗', sentence: '📝' };
-  const statusMap = {
-    pending: { label: '待复习', cls: 'wb-status-pending' },
-    learning: { label: '学习中', cls: 'wb-status-learning' },
-    mastered: { label: '已掌握', cls: 'wb-status-mastered' }
-  };
 
   list.innerHTML = filtered.map(entry => {
-    const now = Date.now();
-    const daysSinceReview = entry.reviews.length > 0
-      ? Math.floor((now - entry.reviews[entry.reviews.length - 1].date) / 86400000)
-      : 999;
-    const status = entry.level >= 5 ? 'mastered' : entry.reviews.length > 0 ? 'learning' : 'pending';
-    const s = statusMap[status];
     return `<div class="wb-item" data-id="${escapeHtml(entry.id)}" title="点击查看全部释义">
       <span class="wb-type-icon">${typeIcons[entry.type] || '📌'}</span>
       <div class="wb-main">
@@ -3094,7 +2838,6 @@ function renderWordbookList() {
         <div class="wb-trans">${escapeHtml(entry.translation || '')}</div>
         <div class="wb-source">${escapeHtml(entry.source || '')}</div>
       </div>
-      <span class="wb-status ${s.cls}">${s.label}</span>
       <button class="wb-del" onclick="event.stopPropagation();removeFromWordbook('${entry.id}')" title="取消标记">✕</button>
     </div>`;
   }).join('');
@@ -3287,162 +3030,6 @@ processParagraph = function(text) {
   return applyWordHighlights(html);
 };
 
-// ─── 背单词模式 ────────────────────────────────────
-let flashItems = [];
-let flashIndex = 0;
-let flashFlipped = false;
-let flashStatsData = { known: 0, fuzzy: 0, unknown: 0 };
-
-function formatReviewDelay(ms) {
-  if (ms <= 15 * 60000) return '10 分钟后';
-  if (ms < 86400000) return `${Math.max(1, Math.round(ms / 3600000))} 小时后`;
-  const days = Math.max(1, Math.round(ms / 86400000));
-  if (days < 30) return `${days} 天后`;
-  const months = Math.round(days / 30);
-  return `${months} 个月后`;
-}
-
-function calcSm2Review(item, result) {
-  const quality = result === 'known' ? 5 : result === 'fuzzy' ? 3 : 0;
-  const now = Date.now();
-  let repetitions = item.repetitions ?? item.level ?? 0;
-  let interval = item.interval ?? (repetitions <= 1 ? repetitions : 6);
-  let easeFactor = item.easeFactor || 2.5;
-
-  easeFactor = Math.max(
-    1.3,
-    easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-  );
-
-  if (quality < 3) {
-    repetitions = 0;
-    interval = 0;
-    return { repetitions, interval, easeFactor, nextReview: now + 10 * 60000 };
-  }
-
-  repetitions += 1;
-  if (repetitions === 1) interval = 1;
-  else if (repetitions === 2) interval = 6;
-  else interval = Math.round(interval * easeFactor);
-
-  return { repetitions, interval, easeFactor, nextReview: now + interval * 86400000 };
-}
-
-function updateReviewPreviews(item) {
-  const previews = {
-    Unknown: calcSm2Review(item, 'unknown'),
-    Fuzzy: calcSm2Review(item, 'fuzzy'),
-    Known: calcSm2Review(item, 'known')
-  };
-  $('reviewNextUnknown').textContent = `下次：${formatReviewDelay(previews.Unknown.nextReview - Date.now())}`;
-  $('reviewNextFuzzy').textContent = `下次：${formatReviewDelay(previews.Fuzzy.nextReview - Date.now())}`;
-  $('reviewNextKnown').textContent = `下次：${formatReviewDelay(previews.Known.nextReview - Date.now())}`;
-}
-
-function startFlashcards() {
-  const wb = getWordbook();
-  const items = Object.values(wb);
-  if (items.length === 0) { showToast('单词本为空，先添加单词吧', 'error'); return; }
-  // 按下次复习时间排序，待复习的优先
-  flashItems = items.sort((a, b) => (a.nextReview || 0) - (b.nextReview || 0));
-  flashIndex = 0;
-  flashFlipped = false;
-  flashStatsData = { known: 0, fuzzy: 0, unknown: 0 };
-  $('flashCard').style.display = '';
-  $('flashDone').style.display = 'none';
-  $('flashActions').style.display = 'none';
-  $('flashOverlay').classList.add('active');
-  toggleWordbook();
-  showFlashCard();
-}
-
-function closeFlashcards() {
-  $('flashOverlay').classList.remove('active');
-}
-
-function showFlashCard() {
-  if (flashIndex >= flashItems.length) {
-    showFlashDone();
-    return;
-  }
-  const item = flashItems[flashIndex];
-  flashFlipped = false;
-  $('flashProgress').textContent = `${flashIndex + 1} / ${flashItems.length}`;
-  $('fcWord').textContent = item.text;
-  $('fcPron').textContent = '';
-  $('flashActions').style.display = 'none';
-  $('flashInner').innerHTML = `
-    <div class="fc-word">${escapeHtml(item.text)}</div>
-    <div class="fc-pron"></div>
-    <div class="fc-tap-hint">👆 想好后点击查看答案</div>
-  `;
-}
-
-function flipCard(event) {
-  if (event.target.closest('.flash-actions') || event.target.closest('.flash-header') || event.target.closest('.flash-done')) return;
-  if (flashFlipped) return;
-  flashFlipped = true;
-  const item = flashItems[flashIndex];
-  const typeIcons = { word: '🔤', phrase: '🔗', sentence: '📝' };
-  const hasDetail = item.sentence || item.source;
-  $('flashInner').innerHTML = `
-    <div class="fc-word">${escapeHtml(item.text)}</div>
-    <div class="fc-pron" style="color:var(--text-secondary);font-size:14px;">${typeIcons[item.type] || '📌'} ${escapeHtml(item.type === 'word' ? '单词' : item.type === 'phrase' ? '词组' : '句子')}</div>
-    <div class="fc-trans">${escapeHtml(item.translation || '暂无释义')}</div>
-    ${hasDetail ? `<button class="fc-detail-btn" onclick="toggleFlashDetail(event)">查看详细解释</button>` : ''}
-    ${hasDetail ? `<div class="fc-extra" id="flashDetail" hidden>
-      ${item.sentence ? `<div class="fc-sentence">${escapeHtml(item.sentence)}</div>` : ''}
-      ${item.source ? `<div class="fc-source">📖 ${escapeHtml(item.source)}</div>` : ''}
-    </div>` : ''}
-  `;
-  $('flashActions').style.display = 'flex';
-  updateReviewPreviews(item);
-}
-
-function toggleFlashDetail(event) {
-  event.stopPropagation();
-  const detail = $('flashDetail');
-  if (!detail) return;
-  detail.hidden = !detail.hidden;
-  event.currentTarget.textContent = detail.hidden ? '查看详细解释' : '收起详细解释';
-}
-
-function flashReview(result, button) {
-  if (!flashFlipped) return;
-  if (button) button.blur();
-  flashStatsData[result]++;
-
-  const item = flashItems[flashIndex];
-  const wb = getWordbook();
-  const key = item.id;
-  if (wb[key]) {
-    if (!wb[key].reviews) wb[key].reviews = [];
-    const schedule = calcSm2Review(wb[key], result);
-    wb[key].reviews.push({ date: Date.now(), result: result, nextReview: schedule.nextReview });
-    wb[key].repetitions = schedule.repetitions;
-    wb[key].interval = schedule.interval;
-    wb[key].easeFactor = schedule.easeFactor;
-    wb[key].nextReview = schedule.nextReview;
-    wb[key].level = schedule.repetitions;
-
-    saveWordbook(wb);
-  }
-
-  flashIndex++;
-  showFlashCard();
-}
-
-function showFlashDone() {
-  $('flashCard').style.display = 'none';
-  $('flashActions').style.display = 'none';
-  $('flashDone').style.display = 'block';
-  $('flashStats').innerHTML =
-    `✅ 知道: ${flashStatsData.known}<br>` +
-    `❓ 模糊: ${flashStatsData.fuzzy}<br>` +
-    `❌ 不认识: ${flashStatsData.unknown}<br><br>` +
-    `总复习: ${flashStatsData.known + flashStatsData.fuzzy + flashStatsData.unknown} 个`;
-}
-
 // ─── 翻译弹窗加「加入单词本」按钮 ─────────────────
 function addWbButtonToPopup(text, type) {
   const existing = isInWordbook(text, type);
@@ -3615,7 +3202,7 @@ async function uploadFiles(files) {
         'Chapter 3: Words Are Tools',
         'Think of words as tools in a toolbox. A carpenter would not try to build a house with only a hammer. In the same way, you need a variety of words to express yourself clearly and effectively.',
         'The more words you know, the more precisely you can think. Studies show that vocabulary size is closely linked to academic success, career advancement, and even emotional intelligence.',
-        'As you read this book, tap on any word you do not know. The translation popup will appear instantly. Click the button to add it to your wordbook, and review it later with the flashcard mode.',
+        'As you read this book, tap on any word you do not know. The translation popup will appear instantly. Click the button to add it to your wordbook for later reference.',
         'Chapter 4: Your Journey Begins',
         'You are now ready to begin your own journey with words. Remember: consistency beats intensity. Read a little every day, mark the words that matter to you, and review them regularly.',
         'The wonderful world of words is waiting for you. Open your heart to it, and it will open its treasures to you. Happy reading!'
