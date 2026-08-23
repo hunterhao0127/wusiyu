@@ -356,6 +356,31 @@ SUPPORTED_FORMATS = {
     '.htm': '🌐 HTML',
 }
 
+ZIP_FORMATS = {'.epub': 'EPUB', '.docx': 'DOCX'}
+
+
+def validate_book_signature(filepath, ext):
+    """用文件头拦住扩展名不匹配或损坏文件。"""
+    with open(filepath, 'rb') as f:
+        head = f.read(8)
+    if ext in ZIP_FORMATS and not head.startswith(b'PK'):
+        raise ValueError(f"{ZIP_FORMATS[ext]} 文件格式不正确，可能是文件损坏或扩展名不匹配")
+    if ext == '.pdf' and not head.startswith(b'%PDF'):
+        raise ValueError("PDF 文件格式不正确，可能是文件损坏或扩展名不匹配")
+
+
+def friendly_parse_error(err, ext):
+    """隐藏底层库的压缩/解析错误，给用户可执行提示。"""
+    msg = str(err)
+    low = msg.lower()
+    if isinstance(err, ValueError):
+        return msg
+    if "incorrect header check" in low or "decompress" in low or "not a zip" in low or "badzipfile" in low:
+        if ext in ZIP_FORMATS:
+            return f"{ZIP_FORMATS[ext]} 文件无法解析，可能是文件损坏、下载不完整，或扩展名改错了"
+        return "文件无法解压解析，可能是文件损坏或格式不匹配"
+    return f"解析失败: {msg}"
+
 
 def list_books():
     """列出所有书籍文件"""
@@ -580,10 +605,11 @@ def api_get_book(filename):
         return jsonify({"success": False, "error": f"暂不支持 {ext} 格式"}), 400
 
     try:
+        validate_book_signature(filepath, ext)
         book = parser(filepath)
         return jsonify({"success": True, "book": book})
     except Exception as e:
-        return jsonify({"success": False, "error": f"解析失败: {str(e)}"}), 500
+        return jsonify({"success": False, "error": friendly_parse_error(e, ext)}), 400
 
 
 @app.route('/api/reading-history/<path:filename>', methods=['GET', 'POST'])
@@ -638,6 +664,7 @@ def api_upload_book():
 
     # 保存到 books 目录
     import time
+    os.makedirs(BOOKS_DIR, exist_ok=True)
     save_path = os.path.join(BOOKS_DIR, safe_name)
     real_books_dir = os.path.realpath(BOOKS_DIR)
     if not os.path.realpath(save_path).startswith(real_books_dir + os.sep):
@@ -650,6 +677,15 @@ def api_upload_book():
         save_path = os.path.join(BOOKS_DIR, safe_name)
 
     file.save(save_path)
+    try:
+        validate_book_signature(save_path, ext)
+    except Exception as e:
+        try:
+            os.remove(save_path)
+        except OSError:
+            pass
+        return jsonify({"success": False, "error": friendly_parse_error(e, ext)}), 400
+
     size = os.path.getsize(save_path)
 
     return jsonify({
