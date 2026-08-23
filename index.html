@@ -1664,6 +1664,18 @@ function normalizePath(path) {
   return stack.join('/');
 }
 
+async function validateBookFileSignature(file, ext) {
+  const bytes = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  const startsWith = (...codes) => codes.every((code, i) => bytes[i] === code);
+  if ((ext === '.epub' || ext === '.docx') && !startsWith(0x50, 0x4b)) {
+    const label = ext === '.epub' ? 'EPUB' : 'DOCX';
+    throw new Error(`${label} 文件格式不正确，可能是文件损坏或扩展名不匹配`);
+  }
+  if (ext === '.pdf' && !startsWith(0x25, 0x50, 0x44, 0x46)) {
+    throw new Error('PDF 文件格式不正确，可能是文件损坏或扩展名不匹配');
+  }
+}
+
 // ─── EPUB 解析（JSZip 直接解析，更可靠） ────────
 async function parseEpub(file) {
   if (typeof JSZip === 'undefined') throw new Error('EPUB 解析库未加载 (检查 lib/jszip.min.js)');
@@ -1674,7 +1686,7 @@ async function parseEpub(file) {
     diag('parseEpub: ZIP 加载成功, 条目数=' + Object.keys(zip.files).length);
   } catch(e) {
     diag('parseEpub: ZIP 加载失败 - ' + e.message);
-    throw new Error('EPUB 无法作为ZIP打开: ' + e.message);
+    throw new Error('EPUB 文件无法解析，可能是文件损坏、下载不完整，或扩展名改错了');
   }
 
   // 1. 找 OPF 路径（container.xml）
@@ -1832,6 +1844,7 @@ async function importBookFile(file) {
   const ext = '.' + file.name.split('.').pop().toLowerCase();
   const supported = ['.txt', '.epub', '.pdf', '.docx', '.html', '.htm'];
   if (!supported.includes(ext)) throw new Error(`不支持 ${ext} 格式`);
+  await validateBookFileSignature(file, ext);
 
   let text = null;
   let paragraphs = [];
