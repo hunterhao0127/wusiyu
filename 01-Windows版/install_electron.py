@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox
 APP_NAME = "务思语"
 APP_EXE = "务思语.exe"
 APP_DIR = "务思语-win32-x64"
-VERSION = "1.5.2"
+VERSION = "1.5.5"
 PATH_FILE = os.path.join(os.path.expanduser('~'), 'AppData', 'Local', '务思语_install_path.txt')
 
 if getattr(sys, 'frozen', False):
@@ -169,11 +169,15 @@ def install():
     root.update()
 
     try:
-        # 复制 Electron 应用目录（更新时跳过 books 和 config.json）
-        skip_dirs = set()
-        if is_update:
-            skip_dirs.add(os.path.normpath(os.path.join(SRC_APP, 'resources', 'flask-app', 'books')))
-            skip_dirs.add(os.path.normpath(os.path.join(SRC_APP, 'resources', 'flask-app', 'config.json')))
+        # 复制 Electron 应用目录（更新时保护用户数据：books/、config.json、reading_history.json 等）
+        # 用"相对路径 + 文件名"判断，避免 normpath 匹配脆弱
+        PROTECT_FILES = {'config.json', 'reading_history.json', 'wordbook.json', '务思语_version.txt'}
+        def is_protected(rel_path):
+            """rel_path: 相对 SRC_APP 的路径（正斜杠）。books 目录整体跳过。"""
+            parts = rel_path.replace('\\', '/').split('/')
+            if 'books' in parts:
+                return True
+            return parts[-1] in PROTECT_FILES
 
         for item in os.listdir(SRC_APP):
             s = os.path.join(SRC_APP, item)
@@ -181,12 +185,31 @@ def install():
             if os.path.isfile(s):
                 shutil.copy2(s, d)
             else:
-                # 检查是否在跳过列表中
-                if os.path.normpath(s) in skip_dirs:
-                    continue
+                if is_update and is_protected(item):
+                    continue  # 用户数据：更新时整体保留目标目录
                 if os.path.exists(d):
                     shutil.rmtree(d, ignore_errors=True)
                 shutil.copytree(s, d)
+
+        # 递归处理 resources 子目录（app 外壳要更新，但 flask-app 内用户数据要保护）
+        src_res = os.path.join(SRC_APP, 'resources')
+        dst_res = os.path.join(dest, 'resources')
+        if is_update and os.path.isdir(src_res):
+            for root, dirs, files in os.walk(src_res):
+                rel = os.path.relpath(root, SRC_APP)
+                # 跳过已判定为保护的整体目录（如 books）
+                rel_parts = rel.replace('\\', '/').split('/')
+                if any(is_protected('/'.join(rel_parts[:i+1])) for i in range(len(rel_parts))):
+                    dirs[:] = []
+                    continue
+                for f in files:
+                    s = os.path.join(root, f)
+                    rel_file = os.path.relpath(s, SRC_APP)
+                    d = os.path.join(dest, rel_file)
+                    if is_protected(rel_file) and os.path.exists(d):
+                        continue  # 保护文件：目标已存在则不覆盖
+                    os.makedirs(os.path.dirname(d), exist_ok=True)
+                    shutil.copy2(s, d)
 
         # 如果是首次安装，复制示例书
         if not is_update:

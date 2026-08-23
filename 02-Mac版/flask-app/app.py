@@ -570,6 +570,12 @@ def handle_config():
     return jsonify({"success": True})
 
 
+@app.route('/api/version')
+def api_version():
+    """后端版本（Electron 壳用它校验没有打到旧版后端）"""
+    return jsonify({"success": True, "version": APP_VERSION})
+
+
 @app.route('/api/books')
 def api_list_books():
     """列出书籍"""
