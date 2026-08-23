@@ -10,6 +10,7 @@ import sys
 import base64
 import mimetypes
 import posixpath
+import time
 import requests
 from flask import Flask, request, jsonify, send_from_directory
 
@@ -36,6 +37,7 @@ APP_DIR = os.environ.get('WUSIYU_DATA_DIR') or base_path()
 BOOKS_DIR = os.path.join(APP_DIR, 'books')
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 VERSION_FILE = os.path.join(APP_DIR, '务思语_version.txt')
+HISTORY_FILE = os.path.join(APP_DIR, 'reading_history.json')
 APP_VERSION = "1.5.5"
 
 DEFAULT_CONFIG = {
@@ -60,8 +62,28 @@ def load_config():
 
 def save_config(cfg):
     """保存配置"""
+    os.makedirs(APP_DIR, exist_ok=True)
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+def load_reading_history():
+    """加载阅读进度。"""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+    return {}
+
+
+def save_reading_history(data):
+    """保存阅读进度。"""
+    os.makedirs(APP_DIR, exist_ok=True)
+    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 # ─── 书籍解析 ────────────────────────────────────────────────
@@ -562,6 +584,35 @@ def api_get_book(filename):
         return jsonify({"success": True, "book": book})
     except Exception as e:
         return jsonify({"success": False, "error": f"解析失败: {str(e)}"}), 500
+
+
+@app.route('/api/reading-history/<path:filename>', methods=['GET', 'POST'])
+def api_reading_history(filename):
+    """获取或保存单本书阅读进度。"""
+    history = load_reading_history()
+
+    if request.method == 'GET':
+        return jsonify({"success": True, "history": history.get(filename)})
+
+    data = request.get_json() or {}
+    try:
+        para_index = int(data.get("paraIndex", 0))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "无效的阅读位置"}), 400
+
+    history[filename] = {
+        "paraIndex": max(0, para_index),
+        "timestamp": data.get("timestamp") or time.time() * 1000
+    }
+
+    keys = list(history.keys())
+    if len(keys) > 50:
+        keys.sort(key=lambda k: history.get(k, {}).get("timestamp", 0))
+        for key in keys[:-50]:
+            history.pop(key, None)
+
+    save_reading_history(history)
+    return jsonify({"success": True})
 
 
 @app.route('/api/upload', methods=['POST'])

@@ -1502,7 +1502,7 @@ async function openBook(filename) {
     el.bookTitle.textContent = book.title || state.currentBook.name;
 
     // 恢复阅读历史
-    const history = loadReadingHistory(filename);
+    const history = await loadReadingHistory(filename);
     if (history && history.paraIndex < state.blocks.length) {
       state.currentParaIndex = history.paraIndex;
       // 计算对应章节
@@ -1824,7 +1824,12 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ─── 阅读历史 ────────────────────────────────────
-function loadReadingHistory(filename) {
+async function loadReadingHistory(filename) {
+  try {
+    const resp = await fetch(`/api/reading-history/${encodeURIComponent(filename)}`);
+    const data = await resp.json();
+    if (data.success && data.history) return data.history;
+  } catch(e) { /* fall back to localStorage */ }
   try {
     const all = JSON.parse(localStorage.getItem('wusiyu_history') || '{}');
     return all[filename] || null;
@@ -1832,12 +1837,19 @@ function loadReadingHistory(filename) {
 }
 
 function saveReadingHistory(filename, paraIndex) {
+  const payload = {
+    paraIndex: paraIndex,
+    timestamp: Date.now()
+  };
+  fetch(`/api/reading-history/${encodeURIComponent(filename)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {});
+
   try {
     const all = JSON.parse(localStorage.getItem('wusiyu_history') || '{}');
-    all[filename] = {
-      paraIndex: paraIndex,
-      timestamp: Date.now()
-    };
+    all[filename] = payload;
     // 限制历史记录数量（最多 50 本书）
     const keys = Object.keys(all);
     if (keys.length > 50) {
