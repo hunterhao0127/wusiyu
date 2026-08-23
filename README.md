@@ -1,6 +1,6 @@
 # 📖 务思语 — 英语沉浸阅读器
 
-> 一个支持 **Windows / macOS / Android / 网页版** 四端的英语阅读器，内置 AI 翻译、单词本、背单词记忆曲线，让英语阅读像微信一样轻快自然。
+> 一个支持 **Windows / macOS / Android / 网页版** 四端的英语阅读器，内置 AI 翻译、单词本、本地书库和阅读进度保存，让英语阅读像微信一样轻快自然。
 
 [![🚀 在线体验网页版（点击直达）](https://img.shields.io/badge/%F0%9F%9A%80_%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C_%E7%BD%91%E9%A1%B5%E7%89%88-%E7%82%B9%E5%87%BB%E7%9B%B4%E8%BE%BE-2ea44f?style=for-the-badge)](https://hunterhao0127.github.io/wusiyu/)
 
@@ -26,6 +26,11 @@ bash build-mac.sh
 ```
 
 构建完成后，安装包在 `dist/务思语-1.5.5-arm64.dmg`。仓库不提交 `.dmg`、书籍、API Key、单词本和阅读历史；这些都只保存在用户本机。
+
+开发和多端跟进文档：
+
+- [多端修改经验记录](docs/UPDATE_EXPERIENCE.md)
+- [Windows 端跟进修改建议](docs/WINDOWS_FOLLOWUP.md)
 
 ---
 
@@ -55,11 +60,10 @@ bash build-mac.sh
 - **选中句子** → 句子翻译 + 结构解析
 - AI 引擎：支持 **8 家 AI 大模型供应商**（DeepSeek / 千问 DashScope / OpenAI / Gemini / Claude / Kimi / 智谱 GLM / 自定义）
 
-### 📕 单词本 + 背单词
+### 📕 单词本与标注
 - 单词 / 词组 / 句子一键加入单词本（AI 自动识别类型）
 - 原文中标记内容显示三色下划线（单词=金、词组=绿、句子=蓝），可选经典/温和/极简三套配色
-- 背单词模式采用“先回忆 → 点卡片看释义 → 查看详细解释 → 三键评分”的复习流程
-- 记忆曲线使用 SM-2 思路，按 repetitions / interval / easeFactor / nextReview 安排下次复习
+- 单词本保留收藏、查看、删除；不成熟的背单词模式已先移除，避免干扰主阅读流程
 
 ### 🎨 阅读体验
 - 白天 / 护眼 / 夜间 三主题
