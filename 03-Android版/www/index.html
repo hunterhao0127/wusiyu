@@ -1203,15 +1203,6 @@ body {
   </div>
 </div>
 <div class="settings-panel" id="settingsPanel">
-
-<!-- ═══ 拖拽上传覆盖层 ═══ -->
-<div class="drop-overlay" id="dropOverlay">
-  <div class="drop-content">
-    <div class="drop-icon">📥</div>
-    <div class="drop-text">释放鼠标导入书籍</div>
-    <div class="drop-formats">TXT · EPUB · PDF · DOCX · HTML</div>
-  </div>
-</div>
   <h2>
     ⚙️ 设置
     <button class="close-btn" onclick="toggleSettings()">✕</button>
@@ -1367,6 +1358,15 @@ body {
 <!-- ═══ Toast 消息 ═══ -->
 <div class="toast" id="toast"></div>
 
+<!-- ═══ 拖拽上传覆盖层 ═══ -->
+<div class="drop-overlay" id="dropOverlay">
+  <div class="drop-content">
+    <div class="drop-icon">📥</div>
+    <div class="drop-text">释放鼠标导入书籍</div>
+    <div class="drop-formats">TXT · EPUB · PDF · DOCX · HTML</div>
+  </div>
+</div>
+
 <script src="lib/jszip.min.js"></script>
 <script src="lib/epub.min.js"></script>
 <script src="lib/pdf.min.js"></script>
@@ -1464,7 +1464,8 @@ const PROVIDERS = {
   dashscope: { name: '🔵 千问 DashScope',     url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model: 'qwen-plus' },
   openai:    { name: '⚪ OpenAI',             url: 'https://api.openai.com/v1/chat/completions',                  model: 'gpt-4o-mini' },
   gemini:    { name: '🔴 Google Gemini',      url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-1.5-flash' },
-  claude:    { name: '🟠 Anthropic Claude',   url: 'https://api.anthropic.com/v1/chat/completions',               model: 'claude-3-5-haiku-latest' },
+  claude:    { name: '🟠 Anthropic Claude',   url: 'https://api.anthropic.com/v1/chat/completions',               model: 'claude-3-5-haiku-latest',
+               native: 'anthropic' },
   moonshot:  { name: '🟣 Kimi 月之暗面',       url: 'https://api.moonshot.cn/v1/chat/completions',                 model: 'moonshot-v1-8k' },
   zhipu:     { name: '🟡 智谱 GLM',           url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',       model: 'glm-4-flash' },
   custom:    { name: '✨ 自定义',             url: '', model: '' }
@@ -1507,6 +1508,32 @@ async function callDeepSeek(messages, temperature = 0.3, max_tokens = 1500) {
   const key = getApiKey();
   if (!key) throw new Error('未配置 API Key');
   const cfg = apiConfig(getProvider());
+
+
+  // Anthropic 原生协议：/v1/messages + x-api-key 头 + anthropic-version
+  if (cfg.native === 'anthropic') {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages,
+        temperature,
+        max_tokens: Math.max(max_tokens, 1024)
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    return data.content[0].text;
+  }
   const resp = await fetch(cfg.url, {
     method: 'POST',
     headers: {
@@ -2787,7 +2814,7 @@ function renderWordbookList() {
         <div class="wb-source">${escapeHtml(entry.source || '')}</div>
       </div>
       <span class="wb-status ${s.cls}">${s.label}</span>
-      <button class="wb-del" onclick="event.stopPropagation();removeFromWordbook('${entry.id}')" title="取消标记">✕</button>
+      <button class="wb-del" data-del-id="${escapeHtml(entry.id)}" title="取消标记">✕</button>
     </div>`;
   }).join('');
 }
@@ -2796,7 +2823,12 @@ function renderWordbookList() {
 document.getElementById('wbList').addEventListener('click', function(e) {
   const item = e.target.closest('.wb-item');
   if (!item) return;
-  if (e.target.closest('.wb-del')) return;
+  const delBtn = e.target.closest('.wb-del');
+  if (delBtn) {
+    e.stopPropagation();
+    removeFromWordbook(delBtn.dataset.delId);
+    return;
+  }
   showWbDetail(item.dataset.id);
 });
 
@@ -3261,8 +3293,8 @@ async function uploadFiles(files) {
       chapters: [
         { title: 'Chapter 1: The Magic of Words', start: 0 },
         { title: 'Chapter 2: The Power of Reading', start: 4 },
-        { title: 'Chapter 3: Words Are Tools', start: 7 },
-        { title: 'Chapter 4: Your Journey Begins', start: 11 }
+        { title: 'Chapter 3: Words Are Tools', start: 8 },
+        { title: 'Chapter 4: Your Journey Begins', start: 12 }
       ]
     };
     await dbPutBook(sample);

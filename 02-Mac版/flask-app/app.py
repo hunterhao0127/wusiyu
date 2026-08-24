@@ -418,7 +418,7 @@ def format_size(size):
 # ─── AI 翻译 ──────────────────────────────────────────────────
 
 def call_ai_api(messages, config):
-    """调用 DeepSeek API"""
+    """调用 AI API（OpenAI 兼容；Anthropic 走原生 /messages 协议）"""
     api_key = config.get("api_key", "")
     api_base = config.get("api_base", "https://api.deepseek.com/v1")
     model = config.get("model", "deepseek-chat")
@@ -426,28 +426,42 @@ def call_ai_api(messages, config):
     if not api_key:
         return {"error": "请先在设置中配置 API Key"}
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+    is_anthropic = "anthropic" in api_base.lower()
 
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": 0.3,
-        "max_tokens": 600
-    }
+    if is_anthropic:
+        url = f"{api_base.rstrip('/')}/messages"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 1500
+        }
+    else:
+        url = f"{api_base.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 600
+        }
 
     try:
-        resp = requests.post(
-            f"{api_base.rstrip('/')}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=15
-        )
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
         resp.raise_for_status()
         data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        if is_anthropic:
+            content = "".join(p.get("text", "") for p in data.get("content", []))
+        else:
+            content = data["choices"][0]["message"]["content"]
         return {"content": content.strip()}
     except requests.exceptions.Timeout:
         return {"error": "请求超时，请检查网络"}
