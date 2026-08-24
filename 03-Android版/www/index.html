@@ -1516,6 +1516,14 @@ async function callDeepSeek(messages, temperature = 0.3, max_tokens = 1500) {
   // messages 数组只保留 user/assistant 轮次（Codex 审查 Finding-1）
   const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
   const restMessages = messages.filter(m => m.role !== 'system');
+    // 与 app.py 对齐：仅在 system 非空时附加顶层字段，避免发送 system:""
+    const payload = {
+      model: cfg.model,
+      messages: restMessages,
+      temperature,
+      max_tokens: Math.max(max_tokens, 1024)
+    };
+    if (system) payload.system = system;
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1524,13 +1532,7 @@ async function callDeepSeek(messages, temperature = 0.3, max_tokens = 1500) {
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
-      body: JSON.stringify({
-        model: cfg.model,
-        system,
-        messages: restMessages,
-        temperature,
-        max_tokens: Math.max(max_tokens, 1024)
-      })
+      body: JSON.stringify(payload)
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
