@@ -1,11 +1,13 @@
 # 📖 务思语 — 英语沉浸阅读器
 
-> 一个支持 **Windows / macOS / Android / 网页版** 四端的英语阅读器，内置 AI 翻译、单词本、本地书库和阅读进度保存，让英语阅读像微信一样轻快自然。
+> **📢 平台调整（2026-08-24）**：Android 版已停止维护，现专注 **Windows / macOS / 网页版**。
+
+> 一个支持 **Windows / macOS / 网页版** 的英语阅读器，内置 AI 翻译、单词本、本地书库和阅读进度保存，让英语阅读像微信一样轻快自然。
 
 [![🚀 在线体验网页版（点击直达）](https://img.shields.io/badge/%F0%9F%9A%80_%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C_%E7%BD%91%E9%A1%B5%E7%89%88-%E7%82%B9%E5%87%BB%E7%9B%B4%E8%BE%BE-2ea44f?style=for-the-badge)](https://hunterhao0127.github.io/wusiyu/)
 
 ![version](https://img.shields.io/badge/version-1.5.5-blue)
-![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android%20%7C%20Web-green)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Web-green)
 ![license](https://img.shields.io/badge/license-MIT-orange)
 
 ---
@@ -80,7 +82,6 @@ bash build-mac.sh
 |------|---------|------|
 | **Windows** | Flask + pywebview | 原生窗口（无浏览器、无控制台） |
 | **macOS** | Flask + Electron | 原生窗口 .dmg 安装包 |
-| **华为平板** | 纯前端 + Capacitor | Android WebView APK |
 
 > 🎯 设计宗旨：桌面端永远弹出**自己的原生窗口**（像微信一样），绝不打开浏览器。
 
@@ -98,13 +99,10 @@ bash build-mac.sh
 │   ├── main.js            # Electron 主进程
 │   ├── install_electron.py# 安装程序
 │   └── flask-app/         # Flask 后端
-├── 02-Mac版/              # macOS 版项目
+└── 02-Mac版/              # macOS 版项目
 │   ├── main.js            # Electron 主进程
 │   ├── build-mac.sh       # 一键构建脚本
 │   └── flask-app/         # Flask 后端源码
-└── 03-Android版/             # 华为Android版
-    ├── www/               # 纯前端（JS 解析 TXT/EPUB/PDF/DOCX）
-    └── capacitor.config.json
 ```
 
 ---
@@ -134,19 +132,6 @@ bash build-mac.sh   # 自动安装依赖、打包 Flask 后端并生成 .dmg
 
 macOS 版使用 Electron 原生窗口和内置 Flask 后端，安装后不需要用户手动启动 Python 服务。用户书籍、API Key、单词本和阅读历史保存在本机应用数据目录，不会提交到仓库。
 
-### 华为平板
-
-```bash
-cd 03-Android版
-# 用 Capacitor 打包 APK（需要 Android SDK）
-npx cap add android
-npx cap sync android
-cd android && gradle assembleDebug
-```
-
-APK 传到平板后：微信收到书籍文件 → 右上角 ⋯ → **「用其他应用打开」→ 务思语** → 自动导入书库。
-
----
 
 ## 🔑 API Key 说明
 
@@ -163,7 +148,7 @@ APK 传到平板后：微信收到书籍文件 → 右上角 ⋯ → **「用其
 | 🟡 智谱 GLM | `open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
 | ✨ 自定义 | 任意 OpenAI 兼容接口 | 自定义 |
 
-Key 在 **⚙️ 设置** 中配置，保存在本地（Android版保存在设备本地，与电脑版相互独立）。
+Key 在 **⚙️ 设置** 中配置，保存在本地。
 
 ---
 
