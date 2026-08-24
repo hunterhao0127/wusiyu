@@ -426,7 +426,10 @@ def call_ai_api(messages, config):
     if not api_key:
         return {"error": "请先在设置中配置 API Key"}
 
-    is_anthropic = "anthropic" in api_base.lower()
+    is_anthropic = (
+        config.get("provider") == "claude"
+        or "anthropic" in api_base.lower()
+    )
 
     if is_anthropic:
         url = f"{api_base.rstrip('/')}/messages"
@@ -435,12 +438,20 @@ def call_ai_api(messages, config):
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json"
         }
+        # Anthropic Messages API：system prompt 放顶层 system 字段，
+        # messages 数组只保留 user/assistant 轮次（Codex 审查 Finding-1）
+        system_text = "\n".join(
+            m.get("content", "") for m in messages if m.get("role") == "system"
+        )
+        rest_messages = [m for m in messages if m.get("role") != "system"]
         payload = {
             "model": model,
-            "messages": messages,
+            "messages": rest_messages,
             "temperature": 0.3,
             "max_tokens": 1500
         }
+        if system_text:
+            payload["system"] = system_text
     else:
         url = f"{api_base.rstrip('/')}/chat/completions"
         headers = {
@@ -777,6 +788,8 @@ def api_test_config():
         test_config["api_base"] = data["api_base"]
     if data.get("model"):
         test_config["model"] = data["model"]
+    if data.get("provider"):
+        test_config["provider"] = data["provider"]
 
     result = call_ai_api([
         {"role": "user", "content": "回复 OK 表示连接正常"}

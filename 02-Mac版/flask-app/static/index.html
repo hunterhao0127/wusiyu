@@ -1386,7 +1386,7 @@ async function testApiKey() {
   el.apiStatus.textContent = '正在测试连接...';
   el.apiStatus.style.color = 'var(--text-secondary)';
 
-  const testResult = await apiPost('/api/config/test', { api_key: key, api_base: cfg.api_base, model: cfg.model });
+  const testResult = await apiPost('/api/config/test', { api_key: key, api_base: cfg.api_base, model: cfg.model, provider: cfg.provider });
   if (testResult.success) {
     el.apiStatus.textContent = '✅ 连接成功！可以开始使用了';
     el.apiStatus.style.color = '#16a34a';

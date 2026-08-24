@@ -1512,6 +1512,10 @@ async function callDeepSeek(messages, temperature = 0.3, max_tokens = 1500) {
 
   // Anthropic 原生协议：/v1/messages + x-api-key 头 + anthropic-version
   if (cfg.native === 'anthropic') {
+  // Anthropic Messages API 要求：system prompt 放顶层 system 字段，
+  // messages 数组只保留 user/assistant 轮次（Codex 审查 Finding-1）
+  const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+  const restMessages = messages.filter(m => m.role !== 'system');
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1522,7 +1526,8 @@ async function callDeepSeek(messages, temperature = 0.3, max_tokens = 1500) {
       },
       body: JSON.stringify({
         model: cfg.model,
-        messages,
+        system,
+        messages: restMessages,
         temperature,
         max_tokens: Math.max(max_tokens, 1024)
       })
