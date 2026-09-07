@@ -1,0 +1,13 @@
+{
+  "version": "1.6.0",
+  "releasedAt": "2026-09-07",
+  "notes": [
+    "修复 Claude 请求协议和网页内容安全问题",
+    "新增学习数据备份与恢复",
+    "新增 Mac 和网页版本更新提醒"
+  ],
+  "downloads": {
+    "mac": "https://github.com/hunterhao0127/wusiyu/releases/latest",
+    "windows": "https://github.com/hunterhao0127/wusiyu/releases/tag/v1.5.5"
+  }
+}
