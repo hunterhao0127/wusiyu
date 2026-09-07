@@ -6,9 +6,11 @@
 
 [![🚀 在线体验网页版（点击直达）](https://img.shields.io/badge/%F0%9F%9A%80_%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C_%E7%BD%91%E9%A1%B5%E7%89%88-%E7%82%B9%E5%87%BB%E7%9B%B4%E8%BE%BE-2ea44f?style=for-the-badge)](https://hunterhao0127.github.io/wusiyu/)
 
-![version](https://img.shields.io/badge/version-1.5.5-blue)
+![version](https://img.shields.io/badge/version-1.6.0-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Web-green)
 ![license](https://img.shields.io/badge/license-MIT-orange)
+
+> 当前更新进度：macOS 与网页版为 v1.6.0；Windows 版暂维持 v1.5.5，待 Windows 真机完成构建和升级验证后再发布 v1.6.0。
 
 ---
 
@@ -27,7 +29,7 @@ cd 02-Mac版
 bash build-mac.sh
 ```
 
-构建完成后，安装包在 `dist/务思语-1.5.5-arm64.dmg`。仓库不提交 `.dmg`、书籍、API Key、单词本和阅读历史；这些都只保存在用户本机。
+构建完成后，安装包在 `dist/务思语-1.6.0-arm64.dmg`。仓库不提交 `.dmg`、书籍、API Key、单词本和阅读历史；这些都只保存在用户本机。
 
 开发和多端跟进文档：
 
@@ -73,6 +75,8 @@ bash build-mac.sh
 - 标记后阅读位置**不跳页**，保持进度
 - TXT 自动识别 UTF-8 / GBK / GB18030 / ANSI 编码，减少乱码
 - 支持按页码或段落跳转，阅读历史自动恢复
+- Mac 和网页版支持学习数据导出/导入（不包含 API Key 和书籍原文件）
+- Mac 和网页版可检测新版本并提醒更新
 
 ---
 
@@ -91,14 +95,10 @@ bash build-mac.sh
 
 ```
 务思语项目/
-├── 01-Windows版/          # Windows 版（Flask + pywebview 原生窗口）
-│   ├── app.py             # Flask 后端（书籍解析 + 服务）
-│   ├── static/index.html  # 前端（阅读器 + 翻译 + 单词本）
-│   └── installer/         # 安装程序（自动检测原位置更新）
 ├── 01-Windows版/         # Electron 原生窗口版（Windows）
 │   ├── main.js            # Electron 主进程
 │   ├── install_electron.py# 安装程序
-│   └── flask-app/         # Flask 后端
+│   └── flask-app/         # 构建时生成的 Flask 后端（不提交）
 └── 02-Mac版/              # macOS 版项目
 │   ├── main.js            # Electron 主进程
 │   ├── build-mac.sh       # 一键构建脚本
@@ -154,10 +154,7 @@ Key 在 **⚙️ 设置** 中配置，保存在本地。
 
 ## 🛠️ 更新机制
 
-所有安装程序遵循同一原则：
-1. **自动检测**原有安装位置（记忆文件 → 桌面快捷方式 → 常见目录）
-2. **原地更新**，绝不让用户重新选择目录
-3. **保留用户数据**（书籍 / 配置 / 单词本），只替换程序文件
+v1.6.0 先采用稳妥的“检测新版本 → 提醒用户 → 打开官方 Release 下载”流程，不在后台自动替换程序。学习数据可单独导出备份，且默认不导出 API Key 和书籍原文件。
 
 ---
 

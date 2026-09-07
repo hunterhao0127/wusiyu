@@ -33,4 +33,4 @@ npx electron-builder --mac
 
 echo ""
 echo "✅ 构建完成！"
-echo "安装包在: dist/务思语-1.5.5-arm64.dmg"
+echo "安装包在: dist/务思语-1.6.0-arm64.dmg"

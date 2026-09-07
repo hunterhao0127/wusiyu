@@ -30,6 +30,7 @@ def resource_path(relative_path):
 
 
 app = Flask(__name__, static_folder=resource_path('static'), static_url_path='')
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 
 # ─── 配置 ────────────────────────────────────────────────────
 # 书籍和配置存在用户数据目录；打包后 app bundle 资源目录可能不可写。
@@ -38,7 +39,7 @@ BOOKS_DIR = os.path.join(APP_DIR, 'books')
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 VERSION_FILE = os.path.join(APP_DIR, '务思语_version.txt')
 HISTORY_FILE = os.path.join(APP_DIR, 'reading_history.json')
-APP_VERSION = "1.5.5"
+APP_VERSION = "1.6.0"
 
 DEFAULT_CONFIG = {
     "api_key": "",
@@ -567,6 +568,11 @@ def index():
     return send_from_directory('static', 'index.html')
 
 
+@app.errorhandler(413)
+def file_too_large(_error):
+    return jsonify({"success": False, "error": "文件超过 100 MB 上限"}), 413
+
+
 @app.route('/api/config', methods=['GET', 'POST'])
 def handle_config():
     """获取或保存配置"""
@@ -614,7 +620,11 @@ def api_get_book(filename):
     filepath = os.path.join(BOOKS_DIR, filename)
     # 安全检查
     realpath = os.path.realpath(filepath)
-    if not realpath.startswith(os.path.realpath(BOOKS_DIR)):
+    try:
+        inside_books = os.path.commonpath([realpath, os.path.realpath(BOOKS_DIR)]) == os.path.realpath(BOOKS_DIR)
+    except ValueError:
+        inside_books = False
+    if not inside_books:
         return jsonify({"success": False, "error": "不允许的路径"}), 403
 
     if not os.path.exists(filepath):
@@ -734,7 +744,7 @@ def api_upload_book():
 @app.route('/api/translate/word', methods=['POST'])
 def api_translate_word():
     """翻译单词"""
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     word = data.get("word", "").strip()
     mode = data.get("mode", "simple")  # simple or detailed
 
@@ -753,7 +763,7 @@ def api_translate_word():
 @app.route('/api/translate/sentence', methods=['POST'])
 def api_translate_sentence():
     """翻译句子"""
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     sentence = data.get("sentence", "").strip()
 
     if not sentence:
@@ -771,7 +781,7 @@ def api_translate_sentence():
 @app.route('/api/config/test', methods=['POST'])
 def api_test_config():
     """测试 API 配置是否可用"""
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     api_key = data.get("api_key", "")
 
     if not api_key:

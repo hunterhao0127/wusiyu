@@ -1122,6 +1122,18 @@ body {
       </button>
     </div>
   </div>
+
+  <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;" />
+
+  <div class="field">
+    <label>学习数据备份</label>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" onclick="exportLearningData()" style="flex:1;">导出备份</button>
+      <button class="btn" onclick="document.getElementById('backupFileInput').click()" style="flex:1;">导入备份</button>
+    </div>
+    <input type="file" id="backupFileInput" accept="application/json,.json" style="display:none" onchange="importLearningData(event)" />
+    <div style="margin-top:6px;font-size:12px;line-height:1.5;color:var(--text-secondary);">包含单词本、复习记录、阅读进度和显示设置，不包含 API Key 和书籍原文件。</div>
+  </div>
 </div>
 
 <!-- ═══ 主阅读区 ═══ -->
@@ -1394,6 +1406,117 @@ async function testApiKey() {
   } else {
     el.apiStatus.textContent = '⚠️ ' + (testResult.error || '连接失败，请检查 Key');
     el.apiStatus.style.color = '#ef4444';
+  }
+}
+
+// ─── 学习数据备份 ───────────────────────
+const BACKUP_FORMAT = 'wusiyu-learning-backup';
+
+function readStoredObject(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch(e) { return {}; }
+}
+
+function mergeNewestRecords(current, incoming, timeKey) {
+  const merged = { ...current };
+  for (const [key, value] of Object.entries(incoming || {})) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    if (!merged[key] || Number(value[timeKey] || 0) >= Number(merged[key][timeKey] || 0)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+function downloadJson(filename, value) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportLearningData() {
+  let ai = {};
+  try {
+    const response = await fetch('/api/config');
+    const result = await response.json();
+    if (result.success && result.config) {
+      ai = {
+        provider: result.config.provider || 'deepseek',
+        api_base: result.config.api_base || '',
+        model: result.config.model || ''
+      };
+    }
+  } catch(e) {}
+
+  const backup = {
+    format: BACKUP_FORMAT,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: {
+      wordbook: readStoredObject('wusiyu_wordbook'),
+      history: readStoredObject('wusiyu_history'),
+      settings: {
+        theme: localStorage.getItem('wusiyu_theme') || 'light',
+        fontSize: Number(localStorage.getItem('wusiyu_fontSize') || 18),
+        lineHeight: Number(localStorage.getItem('wusiyu_lineHeight') || 1.9),
+        wordbookTheme: localStorage.getItem('wusiyu_wbTheme') || 'classic'
+      },
+      ai
+    }
+  };
+  downloadJson(`务思语-学习数据-${new Date().toISOString().slice(0, 10)}.json`, backup);
+  showToast('✅ 学习数据已导出', 'success');
+}
+
+async function importLearningData(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+
+  try {
+    const backup = JSON.parse(await file.text());
+    if (backup.format !== BACKUP_FORMAT || backup.version !== 1 || !backup.data || typeof backup.data !== 'object') {
+      throw new Error('不是有效的务思语学习数据备份');
+    }
+
+    const data = backup.data;
+    const wordbook = mergeNewestRecords(readStoredObject('wusiyu_wordbook'), data.wordbook, 'addedAt');
+    const history = mergeNewestRecords(readStoredObject('wusiyu_history'), data.history, 'timestamp');
+    const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+    const ai = data.ai && typeof data.ai === 'object' ? data.ai : {};
+
+    localStorage.setItem('wusiyu_wordbook', JSON.stringify(wordbook));
+    localStorage.setItem('wusiyu_history', JSON.stringify(history));
+    if (['light', 'sepia', 'dark'].includes(settings.theme)) localStorage.setItem('wusiyu_theme', settings.theme);
+    if (Number.isFinite(Number(settings.fontSize))) localStorage.setItem('wusiyu_fontSize', String(settings.fontSize));
+    if (Number.isFinite(Number(settings.lineHeight))) localStorage.setItem('wusiyu_lineHeight', String(settings.lineHeight));
+    if (['classic', 'gentle', 'minimal'].includes(settings.wordbookTheme)) localStorage.setItem('wusiyu_wbTheme', settings.wordbookTheme);
+
+    for (const [filename, value] of Object.entries(history)) {
+      if (!value || typeof value !== 'object') continue;
+      fetch(`/api/reading-history/${encodeURIComponent(filename)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(value)
+      }).catch(() => {});
+    }
+    if (ai.provider || ai.api_base || ai.model) {
+      await apiPost('/api/config', {
+        provider: ai.provider,
+        api_base: ai.api_base,
+        model: ai.model
+      });
+    }
+
+    showToast('✅ 学习数据已导入，正在刷新', 'success');
+    setTimeout(() => location.reload(), 800);
+  } catch(e) {
+    showToast('导入失败: ' + e.message, 'error');
   }
 }
 
@@ -2611,6 +2734,11 @@ async function uploadFiles(files) {
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     if (!supported.includes(ext)) {
       showToast(`不支持 ${ext} 格式`, 'error');
+      failed++;
+      continue;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      showToast(`「${file.name}」超过 100 MB 上限`, 'error');
       failed++;
       continue;
     }
