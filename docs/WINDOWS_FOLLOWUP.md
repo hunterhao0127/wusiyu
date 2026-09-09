@@ -1,6 +1,21 @@
 # 务思语 1.6.0 Windows 构建与真机验收（给 Windows Hermes）
 
-目标：从 GitHub `main` 构建 Windows x64 安装包，并在真实 Windows 电脑上验证安装、升级、数据保留和核心功能。共享源码已经由 Mac/Web 验证；Windows 端只做平台构建和真机验收，不重新实现业务逻辑。
+目标：在真实 Windows 电脑上验证已生成的 Windows x64 安装包，包括安装、升级、数据保留和核心功能。共享源码已经由 Mac/Web 验证，Windows 云端构建和后端真实启动冒烟测试已通过；Windows 真机只做平台验收，不重新实现业务逻辑。
+
+## 0. 直接下载已验证的安装包（推荐）
+
+打开 [GitHub v1.6.0 Release](https://github.com/hunterhao0127/wusiyu/releases/tag/v1.6.0)，下载 `wusiyu-1.6.0-windows-setup.exe`。
+
+下载后在 PowerShell 中校验：
+
+```powershell
+Get-Item "$HOME\Downloads\wusiyu-1.6.0-windows-setup.exe" | Select-Object FullName,Length
+Get-FileHash "$HOME\Downloads\wusiyu-1.6.0-windows-setup.exe" -Algorithm SHA256
+```
+
+完成标准：大小为 `117194011` 字节，SHA256 为 `d7f7501f66d67cdfddb877322d0b8ece48ea04a3e190d4373af3aca3833a7694`。
+
+如果只做最终真机验收，可跳过第 1～5 节，直接从第 6 节开始。需要在 Windows 本机重新构建时，再执行第 1～5 节。
 
 ## 1. 准备环境
 
@@ -49,6 +64,9 @@ node tests/test_mac_update_helpers.js
 ## 4. 构建并冒烟测试 Windows 后端
 
 ```powershell
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+$env:PIP_PROGRESS_BAR = "off"
 python -m pip install -r "02-Mac版/flask-app/requirements.txt" pyinstaller
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-backend.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-windows-backend.ps1 -BackendPath "01-Windows版/backend/wusiyu_backend.exe"
