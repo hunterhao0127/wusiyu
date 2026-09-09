@@ -1,6 +1,6 @@
 {
   "name": "wusiyu",
-  "version": "1.5.5",
+  "version": "1.6.0",
   "description": "务思语 - 英语沉浸阅读器",
   "main": "main.js",
   "author": "wusiyu",
@@ -8,7 +8,9 @@
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "build-backend": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/build-windows-backend.ps1",
+    "dist": "electron-builder --win --x64",
+    "build-windows": "npm run build-backend && npm run dist"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -27,23 +29,18 @@
     ],
     "extraResources": [
       {
-        "from": "flask-app",
-        "to": "flask-app",
-        "filter": [
-          "**/*"
-        ]
+        "from": "backend/wusiyu_backend.exe",
+        "to": "backend/wusiyu_backend.exe"
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "wusiyu_logo.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -51,8 +48,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "务思语",
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
+      "installerIcon": "wusiyu_logo.ico",
+      "uninstallerIcon": "wusiyu_logo.ico",
       "license": false
     }
   }

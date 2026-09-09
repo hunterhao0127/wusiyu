@@ -1,13 +1,14 @@
 {
   "version": "1.6.0",
-  "releasedAt": "2026-09-07",
+  "releasedAt": "2026-09-09",
   "notes": [
-    "修复 Claude 请求协议和网页内容安全问题",
-    "新增学习数据备份与恢复",
-    "新增 Mac 和网页版本更新提醒"
+    "Mac、Windows、网页可互相导入学习数据和所选书籍",
+    "新增到期复习、每日计划、困难词、评分纠正和学习统计",
+    "新增滚动阅读、宽屏双栏、阅读进度和版面调节",
+    "Mac、Windows、网页均可提示新版本"
   ],
   "downloads": {
     "mac": "https://github.com/hunterhao0127/wusiyu/releases/latest",
-    "windows": "https://github.com/hunterhao0127/wusiyu/releases/tag/v1.5.5"
+    "windows": "https://github.com/hunterhao0127/wusiyu/releases/latest"
   }
 }

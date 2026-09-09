@@ -1,0 +1,57 @@
+name: Windows build and smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: 02-Mac版/flask-app/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: 01-Windows版/package-lock.json
+
+      - name: Install Python build dependencies
+        run: python -m pip install -r '02-Mac版/flask-app/requirements.txt' pyinstaller
+
+      - name: Verify shared source and contracts
+        run: |
+          node scripts/prepare-shared-assets.mjs --check
+          node --test tests/shared/*.test.mjs
+          python -m unittest tests/test_release_contracts.py
+          node tests/test_mac_update_helpers.js
+
+      - name: Build shared backend for Windows
+        run: ./scripts/build-windows-backend.ps1
+
+      - name: Smoke test Windows backend
+        run: ./scripts/smoke-windows-backend.ps1 -BackendPath './01-Windows版/backend/wusiyu_backend.exe'
+
+      - name: Build Windows installer
+        working-directory: 01-Windows版
+        run: |
+          npm ci
+          npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wusiyu-windows
+          path: 01-Windows版/dist/*.exe
+          if-no-files-found: error

@@ -1,123 +1,138 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog, net, shell } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const http = require('http');
-
-// 与 package.json / install_electron.py / 后端 APP_VERSION 保持一致（发布前用 pre-release-check.py 校验）
-const APP_VERSION = '1.5.5';
+const fs = require('fs');
 
 let mainWindow = null;
 let flaskProcess = null;
+const SERVER_URL = 'http://127.0.0.1:5980';
+const UPDATE_URL = 'https://hunterhao0127.github.io/wusiyu/version.json';
+const UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-// Flask 的可执行路径
-function getFlaskPath() {
+function getBackendCommand() {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'flask-app', '务思语.exe');
-  } else {
-    return path.join(__dirname, 'flask-app', '务思语.exe');
+    return { cmd: path.join(process.resourcesPath, 'backend', 'wusiyu_backend.exe'), args: [] };
   }
+
+  const appPy = path.join(__dirname, '..', '02-Mac版', 'flask-app', 'app.py');
+  for (const cmd of ['py', 'python', 'python3']) {
+    try {
+      execFileSync(cmd, cmd === 'py' ? ['-3', '--version'] : ['--version'], { stdio: 'ignore' });
+      return { cmd, args: cmd === 'py' ? ['-3', appPy] : [appPy] };
+    } catch(e) {}
+  }
+  return { cmd: 'python', args: [appPy] };
 }
 
-// 启动 Flask 后端
 function startFlask() {
   return new Promise((resolve, reject) => {
-    const flaskPath = getFlaskPath();
-    const flaskDir = path.dirname(flaskPath);
+    const backend = getBackendCommand();
+    const source = app.isPackaged ? backend.cmd : backend.args[backend.args.length - 1];
+    if (!fs.existsSync(source)) {
+      reject(new Error(`找不到共享后端: ${source}`));
+      return;
+    }
 
-    flaskProcess = spawn(flaskPath, [], {
-      cwd: flaskDir,
+    flaskProcess = spawn(backend.cmd, backend.args, {
+      cwd: path.dirname(source),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      env: { ...process.env, WUSIYU_ELECTRON: '1' }
+      env: {
+        ...process.env,
+        WUSIYU_ELECTRON: '1',
+        WUSIYU_DATA_DIR: app.getPath('userData')
+      }
     });
 
-    flaskProcess.stdout.on('data', (data) => {
-      console.log(`[Flask] ${data}`);
-    });
+    flaskProcess.stdout.on('data', data => console.log(`[Flask] ${data}`));
+    flaskProcess.stderr.on('data', data => console.log(`[Flask] ${data}`));
+    flaskProcess.on('error', reject);
+    flaskProcess.on('exit', () => { flaskProcess = null; });
 
-    flaskProcess.stderr.on('data', (data) => {
-      console.log(`[Flask] ${data}`);
-    });
-
-    flaskProcess.on('error', (err) => {
-      console.error('Flask 启动失败:', err);
-      reject(err);
-    });
-
-    flaskProcess.on('exit', (code) => {
-      console.log(`Flask 退出 (code: ${code})`);
-      flaskProcess = null;
-    });
-
-    // 轮询等待 Flask 就绪，并校验后端版本（防止打到旧版后端）
-    const maxRetries = 30;
     let retries = 0;
-    const checkReady = () => {
+    const check = () => {
       retries++;
-      const req = http.get('http://localhost:5980/api/version', (res) => {
-        let body = '';
-        res.on('data', (chunk) => { body += chunk; });
-        res.on('end', () => {
-          try {
-            const data = JSON.parse(body);
-            if (data.success && data.version === APP_VERSION) {
-              console.log('Flask 已就绪 (v' + data.version + ')');
-              resolve();
-            } else if (retries < maxRetries) {
-              setTimeout(checkReady, 500);
-            } else {
-              reject(new Error('后端版本不匹配: 期望 v' + APP_VERSION + ', 实际 ' + (data.version || '未知') + '。可能有旧版务思语后端仍在运行，请重启电脑或手动结束旧的务思语进程'));
-            }
-          } catch (e) {
-            if (retries < maxRetries) setTimeout(checkReady, 500);
-            else reject(new Error('后端响应异常'));
-          }
-        });
-      });
-      req.on('error', () => {
-        if (retries < maxRetries) setTimeout(checkReady, 500);
-        else reject(new Error('Flask 启动超时'));
-      });
-      req.setTimeout(2000, () => {
-        req.destroy();
-        if (retries < maxRetries) setTimeout(checkReady, 500);
-        else reject(new Error('Flask 启动超时'));
+      http.get(`${SERVER_URL}/api/version`, res => {
+        if (res.statusCode === 200) resolve();
+        else if (retries < 80) setTimeout(check, 500);
+        else reject(new Error('后端启动超时'));
+      }).on('error', () => {
+        if (retries < 80) setTimeout(check, 500);
+        else reject(new Error('后端启动超时'));
       });
     };
-    setTimeout(checkReady, 800);
+    setTimeout(check, 1500);
   });
 }
 
-// 停止 Flask
 function stopFlask() {
-  if (flaskProcess) {
-    flaskProcess.kill('SIGTERM');
-    setTimeout(() => {
-      if (flaskProcess) {
-        flaskProcess.kill('SIGKILL');
-      }
-    }, 3000);
+  if (!flaskProcess) return;
+  flaskProcess.kill('SIGTERM');
+  setTimeout(() => { if (flaskProcess) flaskProcess.kill('SIGKILL'); }, 3000);
+}
+
+function isNewerVersion(latest, current) {
+  const a = String(latest).replace(/^v/, '').split('.').map(Number);
+  const b = String(current).replace(/^v/, '').split('.').map(Number);
+  if (a.some(Number.isNaN) || b.some(Number.isNaN)) return false;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
+}
+
+function safeDownloadUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'github.com' &&
+      url.pathname.startsWith('/hunterhao0127/wusiyu/') ? url.href : '';
+  } catch(e) { return ''; }
+}
+
+async function checkForUpdates() {
+  const stateFile = path.join(app.getPath('userData'), 'update-check.json');
+  try {
+    const previous = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    if (Date.now() - Number(previous.checkedAt || 0) < UPDATE_INTERVAL_MS) return;
+  } catch(e) {}
+
+  try {
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ checkedAt: Date.now() }));
+    const response = await net.fetch(UPDATE_URL, { cache: 'no-store' });
+    if (!response.ok) return;
+    const release = await response.json();
+    const downloadUrl = safeDownloadUrl(release.downloads && release.downloads.windows);
+    if (!downloadUrl || !isNewerVersion(release.version, app.getVersion())) return;
+
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '发现务思语新版本',
+      message: `发现新版本 v${String(release.version).replace(/^v/, '')}`,
+      detail: Array.isArray(release.notes) ? release.notes.join('\n') : String(release.notes || '建议更新到最新版本。'),
+      buttons: ['立即下载', '稍后再说'],
+      defaultId: 0,
+      cancelId: 1
+    });
+    if (result.response === 0) await shell.openExternal(downloadUrl);
+  } catch(e) {
+    console.log('检查更新失败:', e.message);
   }
 }
 
-// ─── 单实例锁：防止重复启动开多个窗口 ────────────
-app.setAppUserModelId('com.wusiyu.app');
-
+app.setAppUserModelId('com.wusiyu.reader');
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
-  // 已有实例在运行，直接退出本实例
   app.quit();
 } else {
-  // 用户再次启动时，聚焦已有窗口
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
   });
 }
 
-// 创建主窗口
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -125,7 +140,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: '务思语 - 英语沉浸阅读器',
-    icon: path.join(__dirname, 'build', 'icon.ico'),
+    icon: path.join(__dirname, 'wusiyu_logo.ico'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -136,95 +151,40 @@ function createWindow() {
     backgroundColor: '#fafaf9'
   });
 
-  // 加载 Flask 页面
-  let showingErrorPage = false; // 防止 data: 错误页自身失败触发无限循环
-  mainWindow.loadURL('http://localhost:5980');
-
-  // 加载失败：显示提示页 + 后端就绪后自动重载（Mac 经验：不白屏、不需手动重启）
-  mainWindow.webContents.on('did-fail-load', (e, code, desc, url, isMain) => {
-    if (!isMain || showingErrorPage) return; // 只处理主框架；错误页自身失败直接忽略（防循环）
-    showingErrorPage = true;
-    const errorHtml = '<div style="font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#444;">' +
-      '<h2>正在启动本地服务…</h2><p>启动完成后会自动进入阅读器，请稍候</p>' +
-      '<p id="st" style="color:#999;font-size:13px;">连接中… (' + desc + ')</p></div>';
-    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorHtml)).catch(() => {});
-    // 轮询真实服务，就绪后自动跳回（最多再等 60 秒）
-    let waited = 0;
-    const retry = setInterval(() => {
-      waited += 1000;
-      const req = http.get('http://localhost:5980/api/version', (res) => {
-        let body = '';
-        res.on('data', (c) => { body += c; });
-        res.on('end', () => {
-          try {
-            const d = JSON.parse(body);
-            if (d.success && d.version === APP_VERSION) {
-              clearInterval(retry);
-              showingErrorPage = false;
-              mainWindow.loadURL('http://localhost:5980').catch(() => {});
-            } else if (waited >= 60000) {
-              clearInterval(retry);
-            }
-          } catch (e) { /* 继续等 */ }
-        });
-      });
-      req.on('error', () => { /* 继续等 */ });
-      req.setTimeout(2000, () => req.destroy());
-      if (waited >= 60000) {
-        clearInterval(retry);
-        // 60 秒仍不行：更新错误页文案（此时 showingErrorPage 已复位允许再次触发）
-        showingErrorPage = false;
-        mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
-          '<div style="font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#444;">' +
-          '<h2>启动超时</h2><p>本地服务未能启动，请关闭务思语后重新打开；若多次失败请重启电脑</p></div>'
-        )).catch(() => {});
-      }
-    }, 1000);
-  });
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
-
-  // 处理外部链接（在默认浏览器打开）
+  mainWindow.loadURL(SERVER_URL);
+  mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    require('electron').shell.openExternal(url);
+    const external = safeDownloadUrl(url);
+    if (external) shell.openExternal(external);
     return { action: 'deny' };
   });
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-// 应用启动
-app.whenReady().then(async () => {
+async function startApplication() {
   try {
-    console.log('正在启动 Flask 服务...');
     await startFlask();
-    console.log('创建窗口...');
     createWindow();
+    void checkForUpdates();
   } catch (err) {
-    console.error('启动失败:', err);
+    stopFlask();
+    const result = await dialog.showMessageBox({
+      type: 'error',
+      title: '务思语启动失败',
+      message: '本地阅读服务未能启动',
+      detail: `${err.message || err}\n\n可能是端口 5980 被占用，或应用文件不完整。`,
+      buttons: ['重试', '退出'],
+      defaultId: 0,
+      cancelId: 1
+    });
+    if (result.response === 0) return startApplication();
     app.quit();
   }
-});
+}
 
-// 所有窗口关闭时退出
+app.whenReady().then(startApplication);
 app.on('window-all-closed', () => {
   stopFlask();
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });
-
-app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow();
-  }
-});
-
-// 退出前清理
-app.on('before-quit', () => {
-  stopFlask();
-});
+app.on('before-quit', stopFlask);

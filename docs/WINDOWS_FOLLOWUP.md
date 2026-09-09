@@ -1,47 +1,143 @@
-# Windows 端跟进修改建议
+# 务思语 1.6.0 Windows 构建与真机验收（给 Windows Hermes）
 
-这份文档用于在拯救者 Windows 电脑上接手验证和修改。Mac 端可以阅读和修改源码，但 Windows 安装包、快捷方式、更新覆盖、exe 启动稳定性必须在 Windows 上确认。
+目标：从 GitHub `main` 构建 Windows x64 安装包，并在真实 Windows 电脑上验证安装、升级、数据保留和核心功能。共享源码已经由 Mac/Web 验证；Windows 端只做平台构建和真机验收，不重新实现业务逻辑。
 
-## 当前读码结论
+## 1. 准备环境
 
-- `01-Windows版` 当前主要是 Electron 外壳和安装器脚本，不包含独立的阅读器 `index.html`。
-- `main.js` 启动 `flask-app/务思语.exe`，健康检查通过后打开 `http://localhost:5980`。
-- `package.json` 会把 `01-Windows版/flask-app` 打进安装包，但当前仓库里没有这个目录。
-- `install_electron.py` 版本号仍是 `1.5.2`，安装界面展示的版本和当前发布版本可能不一致。
-- 安装脚本更新时只明确保留 `books` 和 `config.json`，如果学习记录、单词本、复习记录另存在其他文件，需要一并确认是否会被覆盖。
+安装以下 64 位工具：
 
-## 建议优先修的点
+- Git
+- Python 3.11（安装时勾选 `Add Python to PATH`）
+- Node.js 20 LTS
+- PowerShell 5.1 或 7
 
-1. 确认 Windows 打包来源
-   - 在 Windows 电脑上确认 `01-Windows版/flask-app` 是从哪里生成或复制来的。
-   - 如果它复用 Mac 的 Flask 前端，先把 `02-Mac版/flask-app/static/index.html` 的最新改动同步进去。
-   - 不要新造第二份前端，除非 Windows 端确实需要独立实现。
+在 PowerShell 中执行并保留输出：
 
-2. 同步阅读器体验修复
-   - 符号乱码：确认后端读取书籍时覆盖 UTF-8、UTF-16、GBK/GB18030。
-   - 分段分页：确认页面使用 blocks/pageStarts，不要全文一整块显示。
-   - 图片保留：图片要作为独立 block 保留顺序和位置。
-   - 页码跳转：当前页码、底部范围、跳转输入必须来自同一套 pageStarts。
-   - 标注下划线：使用 background-image 底线方案，避免 `g/y/p` 这类字母把下划线视觉切断。
-   - 背单词：Web 和 Mac 已先删除不成熟的背单词入口；Windows 如果仍有旧入口，建议同步删除，保留单词本收藏、查看、删除。
+```powershell
+git --version
+python --version
+node --version
+npm --version
+```
 
-3. 修 Windows 启动稳定性
-   - `main.js` 已经做了后端健康检查，但加载失败时没有给用户可见提示。
-   - 建议补 `did-fail-load` 或超时提示页，至少显示“正在启动本地服务/启动失败/请重试”。
-   - 如果端口 `5980` 被占用，要么提示用户，要么让后端支持可变端口并把实际端口传给 Electron。
+完成标准：Python 显示 3.11.x，Node 显示 20.x，四条命令均退出成功。
 
-4. 修安装和更新体验
-   - 把 `package.json` 和 `install_electron.py` 的版本号同步到当前版本。
-   - 更新时确认保留所有用户数据：书籍、API Key、单词本、复习记录、阅读历史。
-   - 安装完成后启动一次，确认桌面快捷方式、开始菜单快捷方式、卸载后残留都正常。
+## 2. 获取唯一源码
 
-## Windows 电脑验证清单
+```powershell
+cd $HOME\Desktop
+git clone https://github.com/hunterhao0127/wusiyu.git
+cd wusiyu
+git switch main
+git pull --ff-only
+git status --short
+```
 
-- 源码运行：`cd 01-Windows版` 后能启动 Electron 窗口。
-- 打包前检查：`flask-app/务思语.exe` 存在，`flask-app/static/index.html` 是最新体验版本。
-- 安装包测试：全新安装一次，已有旧版再覆盖更新一次。
-- 数据保留：更新前放入测试书籍、API Key、单词本记录，更新后确认都还在。
-- 阅读器测试：导入含英文引号、破折号、省略号、图片的书，检查乱码、分页、图片位置。
-- 单词本测试：收藏、查看、删除、原文标注都正常；不应再出现旧背单词入口。
-- 标注测试：包含 `g/y/p` 的单词下划线不断裂。
-- 启动测试：连续打开 5 次，不能白屏后自动退出。
+完成标准：最后一条没有输出。不要从 Mac 复制 `wusiyu_backend`；Windows 必须从同一份 `02-Mac版/flask-app/app.py` 生成 `.exe`。
+
+## 3. 先跑共享检查
+
+```powershell
+node scripts/prepare-shared-assets.mjs --check
+node --test tests/shared/*.test.mjs
+python -m unittest tests/test_release_contracts.py
+node tests/test_mac_update_helpers.js
+```
+
+完成标准：共享文件一致，Node/Python 测试全部通过，最后显示 `Desktop update and shared backend helpers: OK`。任何一项失败都先停止打包并记录完整输出。
+
+## 4. 构建并冒烟测试 Windows 后端
+
+```powershell
+python -m pip install -r "02-Mac版/flask-app/requirements.txt" pyinstaller
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-backend.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-windows-backend.ps1 -BackendPath "01-Windows版/backend/wusiyu_backend.exe"
+```
+
+完成标准：存在 `01-Windows版/backend/wusiyu_backend.exe`，并显示 `Windows backend smoke test: OK`。这一步已检查版本接口、书库接口、同步记录往返和“学习数据 + 书籍”ZIP 导出。
+
+## 5. 生成安装包
+
+```powershell
+cd "01-Windows版"
+npm ci
+npm run dist
+Get-ChildItem .\dist\*.exe | Select-Object FullName,Length,LastWriteTime
+Get-FileHash .\dist\*.exe -Algorithm SHA256
+cd ..
+```
+
+完成标准：`01-Windows版/dist` 中出现新的 x64 NSIS 安装程序，记录文件名、大小、时间和 SHA256。
+
+也可在 GitHub 的 `Actions → Windows build and smoke test → Run workflow` 触发云端构建；成功后下载 `wusiyu-windows` artifact。云端成功只证明构建和后端冒烟通过，不能替代下面的真机验收。
+
+## 6. Windows Defender 与安装
+
+先右键安装包选择“使用 Microsoft Defender 扫描”，或以管理员 PowerShell 执行：
+
+```powershell
+Start-MpScan -ScanType CustomScan -ScanPath "安装包的完整路径"
+Get-MpThreatDetection
+```
+
+然后安装两次：
+
+1. 默认路径安装，确认桌面和开始菜单均出现“务思语”。
+2. 卸载后改用含中文的路径，例如 `C:\软件测试\务思语`，再次安装并启动。
+
+完成标准：Defender 无新增威胁；安装、卸载无报错；两个快捷方式都能启动；中文路径可启动。未签名安装包可能出现 SmartScreen 提示，应如实记录提示内容，不能把提示写成“病毒”。
+
+## 7. 核心功能真机验收
+
+启动务思语后逐项操作并截图：
+
+1. 导入 TXT 和 EPUB 各一本，关闭再启动，书籍仍存在。
+2. 打开章节目录并跳转；翻下一页，进度条变化。
+3. 在设置中切换“滚动”，按 `End` 后进度增加；切回“翻页”。
+4. 开启“宽屏双栏”，确认宽窗口显示两栏；缩窄窗口后自动回到一栏。
+5. 修改页面边距和段落间距，重启后数值仍保留。
+6. 点击一个单词加入单词本；再选中一个词组加入词组本。
+7. 打开“复习”，正面只能看到单词/词组，不能提前看到中文释义。
+8. 分别使用“忘了、模糊、记得”；评分后才显示释义、例句和详细释义入口。
+9. 对当前卡片点“记错了”，确认评分改为“忘了”；点“上一词”并重新评分。
+10. 把每日新词改为 7，重启后仍为 7；检查今日完成、记忆率、连续天数、7 天到期和困难词。
+
+完成标准：十项均得到真实界面证据；AI 真实翻译需要用户自己的 API Key，Key 只填在本机，不写进报告或备份。
+
+## 8. Mac/Web/Windows 互导验收
+
+准备一份由 Mac 或 Web 导出的 1.6.0 备份：
+
+1. 导入仅学习数据的 JSON，确认单词本、评分、阅读设置恢复。
+2. 导入勾选书籍后的 ZIP，确认书籍与阅读位置一起恢复。
+3. 删除一个单词，再次导入较旧备份，确认该词不会复活。
+4. 在 Windows 新增一个词并改变阅读位置，分别导出 JSON 和含书 ZIP。
+5. 把 Windows 导出文件交回 Mac/Web 导入，确认书籍、单词本和阅读位置恢复。
+6. 用文本编辑器搜索导出文件，确认不存在真实 API Key。
+
+完成标准：双向导入成功、删除标记有效、API Key 不进入备份。记录导入文件名和每端恢复数量。
+
+## 9. 覆盖升级与数据保留
+
+若机器上有 1.5.5：先在旧版导入一本书、加入一个单词并翻到非第一页；不卸载旧版，直接运行 1.6.0 安装包覆盖安装。
+
+完成标准：升级后版本为 1.6.0；旧书、单词和阅读位置仍在；新复习入口与新阅读设置出现。若旧数据未保留，立即停止发布并保留 `%APPDATA%` 下相关目录，不要反复安装覆盖现场。
+
+## 10. 新版本提示
+
+1. 1.6.0 首次启动不应错误提示“发现新版本 1.6.0”。
+2. 后续 GitHub `version.json` 高于本机版本时，启动后应显示“发现务思语新版本”，点“立即下载”只能打开 `github.com/hunterhao0127/wusiyu` 的 Release 地址。
+
+完成标准：同版本无误报；下一版本发布时补做真实弹窗与下载跳转截图。本次若线上仍为 1.6.0，只能记录“更新比较代码与自动测试通过，等待下一版本做真实弹窗”，不能虚报已看到未来版本。
+
+## 11. 交付报告
+
+向 Mac 端返回：
+
+- 安装包完整文件名、大小、SHA256。
+- Windows 版本和测试机器版本。
+- 第 3～10 节每项“通过/失败/未测”。
+- Defender、SmartScreen、快捷方式、中文路径、覆盖升级的截图。
+- 失败项的原始错误、复现步骤和日志位置。
+
+只有构建检查、真机核心功能、互导、覆盖升级和 Defender 全部通过，才可写“Windows 验证完成”。

@@ -8,11 +8,16 @@ import re
 import json
 import sys
 import base64
+import hashlib
 import mimetypes
 import posixpath
 import time
+import stat
+import tempfile
+import zipfile
 import requests
-from flask import Flask, request, jsonify, send_from_directory
+from urllib.parse import quote
+from flask import Flask, Response, request, jsonify, send_from_directory, stream_with_context
 
 # ─── PyInstaller 打包路径支持 ─────────────────────────
 def base_path():
@@ -30,7 +35,10 @@ def resource_path(relative_path):
 
 
 app = Flask(__name__, static_folder=resource_path('static'), static_url_path='')
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+MAX_BOOK_BYTES = 100 * 1024 * 1024
+MAX_BACKUP_BYTES = 500 * 1024 * 1024
+MAX_BACKUP_BOOKS = 200
+app.config['MAX_CONTENT_LENGTH'] = MAX_BACKUP_BYTES + 25 * 1024 * 1024
 
 # ─── 配置 ────────────────────────────────────────────────────
 # 书籍和配置存在用户数据目录；打包后 app bundle 资源目录可能不可写。
@@ -39,6 +47,7 @@ BOOKS_DIR = os.path.join(APP_DIR, 'books')
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 VERSION_FILE = os.path.join(APP_DIR, '务思语_version.txt')
 HISTORY_FILE = os.path.join(APP_DIR, 'reading_history.json')
+SYNC_RECORDS_FILE = os.path.join(APP_DIR, 'sync_records.json')
 APP_VERSION = "1.6.0"
 
 DEFAULT_CONFIG = {
@@ -87,6 +96,159 @@ def save_reading_history(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+SYNC_RECORD_TYPES = {"vocabulary", "reading-position", "reading-settings", "learning-settings", "ai-settings"}
+FORBIDDEN_SYNC_KEYS = {"apikey", "authorization", "xapikey"}
+
+
+def contains_sync_secret(value):
+    if isinstance(value, list):
+        return any(contains_sync_secret(item) for item in value)
+    if not isinstance(value, dict):
+        return False
+    for key, child in value.items():
+        normalized = str(key).lower().replace("_", "").replace("-", "")
+        if normalized in FORBIDDEN_SYNC_KEYS or contains_sync_secret(child):
+            return True
+    return False
+
+
+def validate_sync_record(record):
+    if not isinstance(record, dict):
+        raise ValueError("同步记录必须是对象")
+    if not isinstance(record.get("id"), str) or not record["id"].strip():
+        raise ValueError("同步记录 id 不能为空")
+    if record.get("type") not in SYNC_RECORD_TYPES:
+        raise ValueError("同步记录类型无效")
+    if not isinstance(record.get("deviceId"), str) or not record["deviceId"].strip():
+        raise ValueError("同步记录 deviceId 不能为空")
+    for key in ("updatedAt",):
+        value = record.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+            raise ValueError(f"同步记录 {key} 无效")
+    deleted_at = record.get("deletedAt")
+    if deleted_at is not None and (
+        not isinstance(deleted_at, (int, float)) or isinstance(deleted_at, bool) or deleted_at < 0
+    ):
+        raise ValueError("同步记录 deletedAt 无效")
+    payload = record.get("payload")
+    if deleted_at is None and not isinstance(payload, dict):
+        raise ValueError("活动同步记录必须包含 payload")
+    if deleted_at is not None and payload is not None:
+        raise ValueError("删除记录的 payload 必须为 null")
+    if contains_sync_secret(payload):
+        raise ValueError("同步记录包含敏感认证字段")
+    return record
+
+
+def load_sync_records():
+    if not os.path.exists(SYNC_RECORDS_FILE):
+        return []
+    with open(SYNC_RECORDS_FILE, 'r', encoding='utf-8') as f:
+        records = json.load(f)
+    if not isinstance(records, list):
+        raise ValueError("同步数据文件格式无效")
+    return [validate_sync_record(record) for record in records]
+
+
+def save_sync_records(records):
+    validated = [validate_sync_record(record) for record in records]
+    os.makedirs(APP_DIR, exist_ok=True)
+    temp_path = SYNC_RECORDS_FILE + '.tmp'
+    try:
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            json.dump(validated, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, SYNC_RECORDS_FILE)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+
+def file_sha256(filepath):
+    digest = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def safe_book_path(filename):
+    """将用户文件名限定在 books 目录内。"""
+    safe_name = os.path.basename(str(filename or '').replace('\\', '/'))
+    if not safe_name:
+        raise ValueError("书籍文件名为空")
+    path = os.path.realpath(os.path.join(BOOKS_DIR, safe_name))
+    if os.path.commonpath([path, os.path.realpath(BOOKS_DIR)]) != os.path.realpath(BOOKS_DIR):
+        raise ValueError("不允许的路径")
+    return safe_name, path
+
+
+def unique_book_filename(filename, used_names):
+    """跨 Windows/macOS 按不区分大小写处理同名书籍。"""
+    used = {name.casefold() for name in used_names}
+    if filename.casefold() not in used:
+        return filename
+    base, ext = os.path.splitext(filename)
+    number = 2
+    while f"{base} ({number}){ext}".casefold() in used:
+        number += 1
+    return f"{base} ({number}){ext}"
+
+
+def validate_backup_document(backup, require_books=False):
+    if not isinstance(backup, dict) or backup.get("format") != "wusiyu-learning-backup":
+        raise ValueError("不是有效的务思语备份")
+    if backup.get("version") != 2 or not isinstance(backup.get("records"), list):
+        raise ValueError("备份版本或 records 无效")
+    records = [validate_sync_record(record) for record in backup["records"]]
+    if contains_sync_secret(backup):
+        raise ValueError("备份包含敏感认证字段")
+    books = backup.get("books", [])
+    if require_books and (not isinstance(books, list) or not books):
+        raise ValueError("备份中没有书籍清单")
+    return records, books
+
+
+def validate_book_manifest(books):
+    if not isinstance(books, list) or not books or len(books) > MAX_BACKUP_BOOKS:
+        raise ValueError("书籍清单为空或超过上限")
+    paths = set()
+    total_size = 0
+    validated = []
+    for item in books:
+        if not isinstance(item, dict):
+            raise ValueError("书籍清单无效")
+        filename = os.path.basename(str(item.get("filename") or '').replace('\\', '/'))
+        archive_path = str(item.get("archivePath") or '').replace('\\', '/')
+        ext = os.path.splitext(filename)[1].lower()
+        try:
+            size = int(item.get("size"))
+        except (TypeError, ValueError):
+            raise ValueError("书籍大小无效") from None
+        book_id = str(item.get("bookId") or '').lower()
+        if not filename or ext not in SUPPORTED_FORMATS:
+            raise ValueError("书籍文件名或格式无效")
+        path_parts = archive_path.split('/')
+        if len(path_parts) != 2 or path_parts[0] != 'books' or not path_parts[1] or '..' in path_parts:
+            raise ValueError("书籍压缩路径无效")
+        if archive_path in paths:
+            raise ValueError("书籍压缩路径重复")
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', book_id):
+            raise ValueError("书籍身份无效")
+        if size < 0 or size > MAX_BOOK_BYTES:
+            raise ValueError("单本书超过 100 MB 上限")
+        paths.add(archive_path)
+        total_size += size
+        validated.append({**item, "filename": filename, "archivePath": archive_path, "size": size, "bookId": book_id})
+    if total_size > MAX_BACKUP_BYTES:
+        raise ValueError("备份中书籍总大小超过 500 MB")
+    return validated
+
+
 # ─── 书籍解析 ────────────────────────────────────────────────
 
 SENTENCE_END_RE = re.compile(r'(?<=[.!?。！？])\s+')
@@ -113,7 +275,8 @@ def clean_text(text):
 
 def decode_text_file(filepath):
     """自动识别 UTF-8 / GBK / ANSI 类文本，避免符号显示成 ����。"""
-    data = open(filepath, 'rb').read()
+    with open(filepath, 'rb') as source_file:
+        data = source_file.read()
     best = None
     for enc in ['utf-8-sig', 'utf-8', 'gb18030', 'gbk', 'cp1252', 'latin-1']:
         try:
@@ -565,12 +728,12 @@ def translate_sentence(sentence, config=None):
 @app.route('/')
 def index():
     """返回主页面"""
-    return send_from_directory('static', 'index.html')
+    return send_from_directory(app.static_folder, 'index.html')
 
 
 @app.errorhandler(413)
 def file_too_large(_error):
-    return jsonify({"success": False, "error": "文件超过 100 MB 上限"}), 413
+    return jsonify({"success": False, "error": "备份文件超过 525 MB 上限"}), 413
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
@@ -605,6 +768,201 @@ def handle_config():
 def api_version():
     """后端版本（Electron 壳用它校验没有打到旧版后端）"""
     return jsonify({"success": True, "version": APP_VERSION})
+
+
+@app.route('/api/sync-records', methods=['GET', 'PUT'])
+def api_sync_records():
+    """读取或原子替换共享学习记录；合并规则由共享前端核心执行。"""
+    if request.method == 'GET':
+        try:
+            return jsonify({"success": True, "records": load_sync_records()})
+        except (OSError, ValueError, json.JSONDecodeError) as e:
+            return jsonify({"success": False, "error": f"读取同步数据失败: {e}"}), 500
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("records"), list):
+        return jsonify({"success": False, "error": "records 必须是数组"}), 400
+    try:
+        save_sync_records(data["records"])
+        return jsonify({"success": True})
+    except (OSError, ValueError) as e:
+        return jsonify({"success": False, "error": f"保存同步数据失败: {e}"}), 400
+
+
+@app.route('/api/backup/export', methods=['POST'])
+def api_export_backup():
+    """把已校验的学习数据和用户勾选的原书打包。"""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("backup"), dict):
+        return jsonify({"success": False, "error": "备份请求无效"}), 400
+    filenames = data.get("filenames")
+    if not isinstance(filenames, list) or not filenames or len(filenames) > MAX_BACKUP_BOOKS:
+        return jsonify({"success": False, "error": "请勾选 1–200 本书"}), 400
+
+    try:
+        validate_backup_document(data["backup"])
+        selected = []
+        seen = set()
+        total_size = 0
+        for index, requested_name in enumerate(filenames):
+            filename, path = safe_book_path(requested_name)
+            if filename.casefold() in seen:
+                raise ValueError("书籍选择重复")
+            seen.add(filename.casefold())
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in SUPPORTED_FORMATS or not os.path.isfile(path):
+                raise ValueError(f"书籍不存在或格式无效: {filename}")
+            size = os.path.getsize(path)
+            if size > MAX_BOOK_BYTES:
+                raise ValueError(f"单本书超过 100 MB: {filename}")
+            total_size += size
+            if total_size > MAX_BACKUP_BYTES:
+                raise ValueError("备份中书籍总大小超过 500 MB")
+            selected.append({
+                "bookId": file_sha256(path),
+                "filename": filename,
+                "archivePath": f"books/{index + 1:04d}{ext}",
+                "size": size,
+                "mediaType": mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                "path": path,
+            })
+
+        manifest = [{key: item[key] for key in ("bookId", "filename", "archivePath", "size", "mediaType")}
+                    for item in selected]
+        backup = dict(data["backup"])
+        backup["books"] = manifest
+        validate_book_manifest(manifest)
+
+        os.makedirs(APP_DIR, exist_ok=True)
+        temp = tempfile.NamedTemporaryFile(prefix='wusiyu-export-', suffix='.zip', dir=APP_DIR, delete=False)
+        temp_path = temp.name
+        temp.close()
+        try:
+            with zipfile.ZipFile(temp_path, 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
+                archive.writestr('backup.json', json.dumps(backup, ensure_ascii=False, indent=2).encode('utf-8'))
+                for item in selected:
+                    archive.write(item["path"], item["archivePath"])
+            download_name = f"务思语-完整备份-{time.strftime('%Y-%m-%d')}.zip"
+            content_length = os.path.getsize(temp_path)
+
+            @stream_with_context
+            def stream_archive():
+                try:
+                    with open(temp_path, 'rb') as source:
+                        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                            yield chunk
+                finally:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+            response = Response(stream_archive(), mimetype='application/zip')
+            response.headers['Content-Length'] = str(content_length)
+            response.headers['Content-Disposition'] = (
+                f"attachment; filename=wusiyu-backup.zip; filename*=UTF-8''{quote(download_name)}"
+            )
+            return response
+        except Exception:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+    except (OSError, ValueError, zipfile.BadZipFile) as e:
+        return jsonify({"success": False, "error": f"导出失败: {e}"}), 400
+
+
+@app.route('/api/backup/import', methods=['POST'])
+def api_import_backup():
+    """校验完整 ZIP，原子写入每本书，返回学习记录交由共享核心合并。"""
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        return jsonify({"success": False, "error": "未选择 ZIP 备份"}), 400
+
+    os.makedirs(APP_DIR, exist_ok=True)
+    temp = tempfile.NamedTemporaryFile(prefix='wusiyu-import-', suffix='.zip', dir=APP_DIR, delete=False)
+    temp_path = temp.name
+    temp.close()
+    try:
+        upload.save(temp_path)
+        if os.path.getsize(temp_path) > app.config['MAX_CONTENT_LENGTH']:
+            raise ValueError("备份文件超过上限")
+
+        with zipfile.ZipFile(temp_path, 'r') as archive:
+            infos = archive.infolist()
+            if len(infos) > MAX_BACKUP_BOOKS + 1:
+                raise ValueError("备份中文件数超过上限")
+            if any(info.flag_bits & 0x1 for info in infos):
+                raise ValueError("不支持加密 ZIP")
+            if any(stat.S_ISLNK(info.external_attr >> 16) for info in infos):
+                raise ValueError("备份不能包含符号链接")
+            names = [info.filename.replace('\\', '/') for info in infos]
+            if names.count('backup.json') != 1:
+                raise ValueError("备份缺少唯一的 backup.json")
+            backup_info = infos[names.index('backup.json')]
+            if backup_info.file_size > 10 * 1024 * 1024:
+                raise ValueError("backup.json 超过 10 MB 上限")
+            try:
+                backup = json.loads(archive.read(backup_info).decode('utf-8'))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                raise ValueError("backup.json 内容无效") from None
+            validate_backup_document(backup, require_books=True)
+            manifest = validate_book_manifest(backup["books"])
+            expected_paths = {item["archivePath"] for item in manifest}
+            actual_paths = {name for name in names if name != 'backup.json'}
+            if actual_paths != expected_paths or len(names) != len(expected_paths) + 1:
+                raise ValueError("备份书籍文件与清单不一致")
+
+            info_by_name = {info.filename.replace('\\', '/'): info for info in infos}
+            with tempfile.TemporaryDirectory(prefix='wusiyu-books-', dir=APP_DIR) as staging_dir:
+                staged = []
+                for index, item in enumerate(manifest):
+                    info = info_by_name[item["archivePath"]]
+                    if info.file_size != item["size"]:
+                        raise ValueError(f"书籍大小与清单不一致: {item['filename']}")
+                    stage_path = os.path.join(staging_dir, str(index))
+                    digest = hashlib.sha256()
+                    written = 0
+                    with archive.open(info, 'r') as source, open(stage_path, 'wb') as target:
+                        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                            written += len(chunk)
+                            if written > MAX_BOOK_BYTES:
+                                raise ValueError(f"单本书超过 100 MB: {item['filename']}")
+                            digest.update(chunk)
+                            target.write(chunk)
+                    actual_id = 'sha256:' + digest.hexdigest()
+                    if written != item["size"] or actual_id != item["bookId"]:
+                        raise ValueError(f"书籍校验失败: {item['filename']}")
+                    validate_book_signature(stage_path, os.path.splitext(item["filename"])[1].lower())
+                    staged.append((item, stage_path))
+
+                os.makedirs(BOOKS_DIR, exist_ok=True)
+                existing_names = [book["filename"] for book in list_books()]
+                existing_ids = {file_sha256(os.path.join(BOOKS_DIR, name)) for name in existing_names}
+                imported = []
+                skipped = []
+                for item, stage_path in staged:
+                    if item["bookId"] in existing_ids:
+                        skipped.append(item["filename"])
+                        continue
+                    filename = unique_book_filename(item["filename"], existing_names)
+                    _safe_name, target_path = safe_book_path(filename)
+                    os.replace(stage_path, target_path)
+                    existing_names.append(filename)
+                    existing_ids.add(item["bookId"])
+                    imported.append({"bookId": item["bookId"], "filename": filename})
+
+        return jsonify({
+            "success": True,
+            "backup": backup,
+            "importedBooks": imported,
+            "skippedBooks": skipped,
+        })
+    except (OSError, ValueError, zipfile.BadZipFile, RuntimeError) as e:
+        return jsonify({"success": False, "error": f"导入失败: {e}"}), 400
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 
 @app.route('/api/books')
@@ -648,6 +1006,8 @@ def api_get_book(filename):
     try:
         validate_book_signature(filepath, ext)
         book = parser(filepath)
+        book["bookId"] = file_sha256(filepath)
+        book["size"] = os.path.getsize(filepath)
         return jsonify({"success": True, "book": book})
     except Exception as e:
         return jsonify({"success": False, "error": friendly_parse_error(e, ext)}), 400
@@ -718,6 +1078,12 @@ def api_upload_book():
         save_path = os.path.join(BOOKS_DIR, safe_name)
 
     file.save(save_path)
+    if os.path.getsize(save_path) > MAX_BOOK_BYTES:
+        try:
+            os.remove(save_path)
+        except OSError:
+            pass
+        return jsonify({"success": False, "error": "单本书超过 100 MB 上限"}), 413
     try:
         validate_book_signature(save_path, ext)
     except Exception as e:
@@ -732,6 +1098,7 @@ def api_upload_book():
     return jsonify({
         "success": True,
         "book": {
+            "bookId": file_sha256(save_path),
             "name": os.path.splitext(safe_name)[0],
             "filename": safe_name,
             "ext": ext,
