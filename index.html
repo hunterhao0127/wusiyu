@@ -1167,12 +1167,17 @@ body {
 
   <div class="field">
     <label>学习数据备份</label>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:400;cursor:pointer;">
+      <input type="checkbox" id="includeBooksInBackup" onchange="toggleBookBackupOptions()" />
+      同时包含书籍原文件
+    </label>
+    <div id="backupBookPicker" style="display:none;max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;"></div>
     <div style="display:flex;gap:8px;">
       <button class="btn-primary" onclick="exportLearningData()" style="flex:1;">导出备份</button>
       <button class="btn" onclick="document.getElementById('backupFileInput').click()" style="flex:1;">导入备份</button>
     </div>
-    <input type="file" id="backupFileInput" accept="application/json,.json" style="display:none" onchange="importLearningData(event)" />
-    <div style="margin-top:6px;font-size:12px;line-height:1.5;color:var(--text-secondary);">包含单词本、复习记录、阅读进度和显示设置，不包含 API Key 和书籍原文件。</div>
+    <input type="file" id="backupFileInput" accept="application/json,.json,application/zip,.zip" style="display:none" onchange="importLearningData(event)" />
+    <div style="margin-top:6px;font-size:12px;line-height:1.5;color:var(--text-secondary);">默认只导出学习数据；勾选后可选择书籍并导出 ZIP。始终不包含 API Key。</div>
   </div>
 </div>
 
@@ -1278,6 +1283,7 @@ let state = {
   theme: 'light',
   fontSize: 18,
   lineHeight: 1.9,
+  readerSettings: null,
   translationMode: 'simple',  // simple / detailed
   currentWord: '',
   pendingTranslate: null, // 当前正在翻译的 promise
@@ -1468,6 +1474,7 @@ async function loadSettingsUI() {
       el.apiKeyInput.placeholder = '已配置: ' + key.slice(0, 6) + '...' + key.slice(-4);
     }
     setProvider(getProvider());
+    if ($('includeBooksInBackup')?.checked) await renderBackupBookPicker();
   } catch(e) {}
 }
 
@@ -1516,8 +1523,40 @@ async function saveApiKey() {
   }
 }
 
-// ─── 学习数据备份 ───────────────────────
-const BACKUP_FORMAT = 'wusiyu-learning-backup';
+// ─── 多端共享数据核心 ───────────────────────
+const DEVICE_ID_KEY = 'wusiyu_device_id';
+const CORE_MIGRATION_KEY = 'wusiyu_core_migration';
+const sharedModulesPromise = Promise.all([
+  import('./assets/shared/core/model.js'),
+  import('./assets/shared/core/learning/vocabulary.js'),
+  import('./assets/shared/core/learning/review.js'),
+  import('./assets/shared/core/reader/reading-position.js'),
+  import('./assets/shared/core/reader/settings.js'),
+  import('./assets/shared/core/sync/records.js'),
+  import('./assets/shared/core/sync/backup.js'),
+  import('./assets/shared/core/sync/book-archive.js'),
+  import('./assets/shared/adapters/web-storage.js'),
+  import('./assets/shared/ui/review-panel.js'),
+  import('./assets/shared/ui/reader-controls.js'),
+]).then(([model, vocabulary, review, reading, readerSettings, records, backup, bookArchive, storage, reviewPanel, readerControls]) => ({
+  ...model, ...vocabulary, ...review, ...reading, ...readerSettings, ...records, ...backup, ...bookArchive, ...storage, ...reviewPanel, ...readerControls
+}));
+
+let sharedCore = null;
+let syncStorage = null;
+let syncRecords = [];
+let syncWriteChain = Promise.resolve();
+let readerControls = null;
+let readerSettingsTimer = null;
+
+function getDeviceId() {
+  let value = localStorage.getItem(DEVICE_ID_KEY);
+  if (!value) {
+    value = globalThis.crypto?.randomUUID?.() || `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(DEVICE_ID_KEY, value);
+  }
+  return value;
+}
 
 function readStoredObject(key) {
   try {
@@ -1526,19 +1565,23 @@ function readStoredObject(key) {
   } catch(e) { return {}; }
 }
 
-function mergeNewestRecords(current, incoming, timeKey) {
-  const merged = { ...current };
-  for (const [key, value] of Object.entries(incoming || {})) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-    if (!merged[key] || Number(value[timeKey] || 0) >= Number(merged[key][timeKey] || 0)) {
-      merged[key] = value;
-    }
-  }
-  return merged;
+function runSyncMutation(buildNext) {
+  const operation = syncWriteChain.then(async () => {
+    const next = sharedCore.mergeRecords(buildNext(syncRecords));
+    await syncStorage.writeRecords(next);
+    syncRecords = next;
+    return next;
+  });
+  syncWriteChain = operation.catch(() => {});
+  return operation;
 }
 
 function downloadJson(filename, value) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+  downloadBlob(filename, new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
@@ -1546,11 +1589,42 @@ function downloadJson(filename, value) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportLearningData() {
-  const backup = {
-    format: BACKUP_FORMAT,
+async function toggleBookBackupOptions() {
+  const picker = $('backupBookPicker');
+  const enabled = $('includeBooksInBackup').checked;
+  picker.style.display = enabled ? 'block' : 'none';
+  if (enabled) await renderBackupBookPicker();
+}
+
+async function renderBackupBookPicker() {
+  const picker = $('backupBookPicker');
+  const books = await dbGetAllBooks();
+  if (!books.length) {
+    picker.innerHTML = '<div style="font-size:12px;color:var(--text-secondary);">书库中还没有书籍。</div>';
+    return;
+  }
+  picker.innerHTML = books.map(book => {
+    const available = book.sourceBlob instanceof Blob;
+    const note = available ? formatFileSize(book.sourceBlob.size) : '需要重新导入原文件';
+    return `<label style="display:flex;align-items:flex-start;gap:8px;padding:5px 2px;${available ? 'cursor:pointer;' : 'opacity:.6;'}">
+      <input type="checkbox" class="backup-book-choice" data-filename="${escapeHtml(book.filename)}" ${available ? '' : 'disabled'} />
+      <span style="min-width:0;"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(book.name || book.filename)}</span><span style="font-size:11px;color:var(--text-secondary);">${escapeHtml(note)}</span></span>
+    </label>`;
+  }).join('');
+}
+
+function formatFileSize(size) {
+  return size >= 1048576 ? `${(size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function selectedBackupBookNames() {
+  return [...document.querySelectorAll('.backup-book-choice:checked')].map(input => input.dataset.filename);
+}
+
+function legacyBackupSnapshot() {
+  return {
+    format: 'wusiyu-learning-backup',
     version: 1,
-    exportedAt: new Date().toISOString(),
     data: {
       wordbook: readStoredObject('wusiyu_wordbook'),
       history: readStoredObject('wusiyu_history'),
@@ -1558,7 +1632,11 @@ function exportLearningData() {
         theme: localStorage.getItem('wusiyu_theme') || 'light',
         fontSize: Number(localStorage.getItem('wusiyu_fontSize') || 18),
         lineHeight: Number(localStorage.getItem('wusiyu_lineHeight') || 1.9),
-        wordbookTheme: localStorage.getItem('wusiyu_wbTheme') || 'classic'
+        wordbookTheme: localStorage.getItem('wusiyu_wbTheme') || 'classic',
+        readingMode: localStorage.getItem('wusiyu_readingMode') || 'paged',
+        twoColumn: localStorage.getItem('wusiyu_twoColumn') === 'true',
+        pageMargin: Number(localStorage.getItem('wusiyu_pageMargin') || 20),
+        paragraphSpacing: Number(localStorage.getItem('wusiyu_paragraphSpacing') || 6)
       },
       ai: {
         provider: getProvider(),
@@ -1567,8 +1645,151 @@ function exportLearningData() {
       }
     }
   };
-  downloadJson(`务思语-学习数据-${new Date().toISOString().slice(0, 10)}.json`, backup);
-  showToast('✅ 学习数据已导出', 'success');
+}
+
+async function initSharedData() {
+  sharedCore = await sharedModulesPromise;
+  syncStorage = sharedCore.createWebStorageAdapter();
+  syncRecords = await syncStorage.readRecords();
+  if (localStorage.getItem(CORE_MIGRATION_KEY) !== '2') {
+    const books = await dbGetAllBooks();
+    const migrated = sharedCore.parseBackup(legacyBackupSnapshot(), {
+      deviceId: getDeviceId(),
+      now: Date.now(),
+      legacyBooks: sharedCore.legacyBookMap(books),
+    });
+    const next = sharedCore.mergeRecords(syncRecords, migrated);
+    await syncStorage.writeRecords(next);
+    syncRecords = await syncStorage.readRecords();
+    localStorage.setItem(CORE_MIGRATION_KEY, '2');
+  }
+}
+
+async function exportLearningData() {
+  try {
+    await syncWriteChain;
+    const backup = sharedCore.exportBackup(syncRecords, { deviceId: getDeviceId() });
+    const date = new Date().toISOString().slice(0, 10);
+    if (!$('includeBooksInBackup').checked) {
+      downloadJson(`务思语-学习数据-${date}.json`, backup);
+      showToast('✅ 学习数据已导出', 'success');
+      return;
+    }
+
+    const names = selectedBackupBookNames();
+    if (!names.length) throw new Error('请先勾选要导出的书籍');
+    if (names.length > 200) throw new Error('一次最多导出 200 本书');
+    const books = await Promise.all(names.map(dbGetBook));
+    const totalSize = books.reduce((sum, book) => sum + (book?.sourceBlob?.size || 0), 0);
+    if (totalSize > 500 * 1024 * 1024) throw new Error('所选书籍总大小超过 500 MB');
+
+    const zip = new JSZip();
+    backup.books = [];
+    for (let index = 0; index < books.length; index++) {
+      const book = books[index];
+      if (!(book?.sourceBlob instanceof Blob)) throw new Error(`「${book?.name || names[index]}」需要重新导入原文件`);
+      if (book.sourceBlob.size > 100 * 1024 * 1024) throw new Error(`「${book.name}」超过 100 MB 上限`);
+      const actualBookId = await fileBookId(book.sourceBlob);
+      if (actualBookId !== book.bookId) throw new Error(`「${book.name}」原文件校验失败，请重新导入`);
+      const archivePath = sharedCore.archiveBookPath(index, book.filename);
+      backup.books.push({
+        bookId: book.bookId,
+        filename: book.filename,
+        archivePath,
+        size: book.sourceBlob.size,
+        mediaType: book.sourceBlob.type || 'application/octet-stream',
+      });
+      zip.file(archivePath, book.sourceBlob);
+    }
+    zip.file('backup.json', JSON.stringify(backup, null, 2));
+    const archive = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    downloadBlob(`务思语-完整备份-${date}.zip`, archive);
+    showToast(`✅ 已导出学习数据和 ${books.length} 本书`, 'success');
+  } catch(e) {
+    showToast('导出失败: ' + e.message, 'error');
+  }
+}
+
+async function applyLearningBackup(backup) {
+    const books = await dbGetAllBooks();
+    const imported = sharedCore.parseBackup(backup, {
+      deviceId: getDeviceId(),
+      now: Date.now(),
+      legacyBooks: sharedCore.legacyBookMap(books),
+    });
+    await runSyncMutation(current => sharedCore.mergeRecords(current, imported));
+
+    const settings = sharedCore.activeRecords(syncRecords, 'reading-settings')[0]?.payload || {};
+    const ai = sharedCore.activeRecords(syncRecords, 'ai-settings')[0]?.payload || {};
+    if (['light', 'sepia', 'dark'].includes(settings.theme)) localStorage.setItem('wusiyu_theme', settings.theme);
+    if (Number.isFinite(Number(settings.fontSize))) localStorage.setItem('wusiyu_fontSize', String(settings.fontSize));
+    if (Number.isFinite(Number(settings.lineHeight))) localStorage.setItem('wusiyu_lineHeight', String(settings.lineHeight));
+    if (['classic', 'gentle', 'minimal'].includes(settings.wordbookTheme)) localStorage.setItem('wusiyu_wbTheme', settings.wordbookTheme);
+    if (['paged', 'scroll'].includes(settings.readingMode)) localStorage.setItem('wusiyu_readingMode', settings.readingMode);
+    if (typeof settings.twoColumn === 'boolean') localStorage.setItem('wusiyu_twoColumn', String(settings.twoColumn));
+    if (Number.isFinite(Number(settings.pageMargin))) localStorage.setItem('wusiyu_pageMargin', String(settings.pageMargin));
+    if (Number.isFinite(Number(settings.paragraphSpacing))) localStorage.setItem('wusiyu_paragraphSpacing', String(settings.paragraphSpacing));
+    if (typeof ai.provider === 'string' && PROVIDERS[ai.provider]) localStorage.setItem(API_PROVIDER_STORAGE, ai.provider);
+    if (typeof ai.api_base === 'string') localStorage.setItem(API_CUSTOM_URL_STORAGE, ai.api_base);
+    if (typeof ai.model === 'string') localStorage.setItem(API_CUSTOM_MODEL_STORAGE, ai.model);
+    syncLegacyWordbook();
+    syncLegacyHistory();
+}
+
+async function importBookArchive(file) {
+  const zip = await JSZip.loadAsync(file);
+  const entries = Object.entries(zip.files).filter(([, entry]) => !entry.dir);
+  if (entries.length > 201) throw new Error('备份内文件数超过上限');
+  for (const [path, entry] of entries) {
+    const originalPath = entry.unsafeOriginalName || path;
+    if (path !== 'backup.json' && !sharedCore.safeBookArchivePath(path)) throw new Error(`备份包含危险路径: ${originalPath}`);
+    if (originalPath.includes('..') || originalPath.startsWith('/') || originalPath.includes('\\')) {
+      throw new Error(`备份包含危险路径: ${originalPath}`);
+    }
+  }
+  const manifestEntry = zip.file('backup.json');
+  if (!manifestEntry) throw new Error('ZIP 中缺少 backup.json');
+  const backup = JSON.parse(await manifestEntry.async('text'));
+  sharedCore.parseBackup(backup, { deviceId: getDeviceId(), now: Date.now(), legacyBooks: {} });
+  const manifest = sharedCore.validateBookManifest(backup.books);
+
+  const currentBooks = await dbGetAllBooks();
+  const knownIds = new Set(currentBooks.map(book => book.bookId).filter(Boolean));
+  const usedNames = new Set(currentBooks.map(book => book.filename));
+  const supported = new Set(['.txt', '.epub', '.pdf', '.docx', '.html', '.htm']);
+  let importedCount = 0;
+  let skippedCount = 0;
+  const failures = [];
+  let actualTotal = 0;
+
+  for (const item of manifest) {
+    try {
+      const filename = item.filename;
+      const ext = sharedCore.bookExtension(filename);
+      if (!supported.has(ext)) throw new Error('书籍文件名或格式无效');
+      const entry = zip.file(item.archivePath);
+      if (!entry) throw new Error('原文件缺失');
+      const declaredSize = Number(item.size);
+      if (!Number.isFinite(declaredSize) || declaredSize < 0 || declaredSize > 100 * 1024 * 1024) throw new Error('书籍大小超过上限');
+      const knownUncompressed = Number(entry._data?.uncompressedSize);
+      if (Number.isFinite(knownUncompressed) && knownUncompressed > 100 * 1024 * 1024) throw new Error('书籍解压大小超过上限');
+      if (knownIds.has(item.bookId)) { skippedCount++; continue; }
+      const blob = await entry.async('blob');
+      actualTotal += blob.size;
+      if (blob.size !== declaredSize || blob.size > 100 * 1024 * 1024 || actualTotal > 500 * 1024 * 1024) throw new Error('书籍大小校验失败');
+      if (await fileBookId(blob) !== item.bookId) throw new Error('SHA-256 校验失败');
+      const restoredName = sharedCore.uniqueBookFilename(filename, usedNames);
+      const restoredFile = new File([blob], restoredName, { type: item.mediaType || blob.type });
+      await importBookFile(restoredFile);
+      usedNames.add(restoredName);
+      knownIds.add(item.bookId);
+      importedCount++;
+    } catch(e) {
+      failures.push(`${item?.filename || '未知书籍'}: ${e.message}`);
+    }
+  }
+  await applyLearningBackup(backup);
+  return { importedCount, skippedCount, failures };
 }
 
 async function importLearningData(event) {
@@ -1577,28 +1798,15 @@ async function importLearningData(event) {
   if (!file) return;
 
   try {
-    const backup = JSON.parse(await file.text());
-    if (backup.format !== BACKUP_FORMAT || backup.version !== 1 || !backup.data || typeof backup.data !== 'object') {
-      throw new Error('不是有效的务思语学习数据备份');
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      const result = await importBookArchive(file);
+      const failedText = result.failures.length ? `，${result.failures.length} 本失败` : '';
+      showToast(`✅ 已恢复 ${result.importedCount} 本，跳过 ${result.skippedCount} 本${failedText}，正在刷新`, result.failures.length ? 'error' : 'success');
+    } else {
+      await applyLearningBackup(JSON.parse(await file.text()));
+      showToast('✅ 学习数据已导入，正在刷新', 'success');
     }
 
-    const data = backup.data;
-    const wordbook = mergeNewestRecords(readStoredObject('wusiyu_wordbook'), data.wordbook, 'addedAt');
-    const history = mergeNewestRecords(readStoredObject('wusiyu_history'), data.history, 'timestamp');
-    const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
-    const ai = data.ai && typeof data.ai === 'object' ? data.ai : {};
-
-    localStorage.setItem('wusiyu_wordbook', JSON.stringify(wordbook));
-    localStorage.setItem('wusiyu_history', JSON.stringify(history));
-    if (['light', 'sepia', 'dark'].includes(settings.theme)) localStorage.setItem('wusiyu_theme', settings.theme);
-    if (Number.isFinite(Number(settings.fontSize))) localStorage.setItem('wusiyu_fontSize', String(settings.fontSize));
-    if (Number.isFinite(Number(settings.lineHeight))) localStorage.setItem('wusiyu_lineHeight', String(settings.lineHeight));
-    if (['classic', 'gentle', 'minimal'].includes(settings.wordbookTheme)) localStorage.setItem('wusiyu_wbTheme', settings.wordbookTheme);
-    if (typeof ai.provider === 'string' && PROVIDERS[ai.provider]) localStorage.setItem(API_PROVIDER_STORAGE, ai.provider);
-    if (typeof ai.api_base === 'string') localStorage.setItem(API_CUSTOM_URL_STORAGE, ai.api_base);
-    if (typeof ai.model === 'string') localStorage.setItem(API_CUSTOM_MODEL_STORAGE, ai.model);
-
-    showToast('✅ 学习数据已导入，正在刷新', 'success');
     setTimeout(() => location.reload(), 800);
   } catch(e) {
     showToast('导入失败: ' + e.message, 'error');
@@ -1631,9 +1839,10 @@ function setTheme(theme) {
   state.theme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('wusiyu_theme', theme);
-  document.querySelectorAll('.theme-btn').forEach(b => {
+  document.querySelectorAll('.theme-btn[data-theme]').forEach(b => {
     b.classList.toggle('active', b.dataset.theme === theme);
   });
+  scheduleReaderSettingsSave();
 }
 
 // ─── 标记下划线配色 ──────────────────────────────
@@ -1643,6 +1852,7 @@ function setWbTheme(wbTheme) {
   document.querySelectorAll('.wb-theme-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.wbTheme === wbTheme);
   });
+  scheduleReaderSettingsSave();
 }
 
 // ─── 字号 / 行距 ──────────────────────────────────
@@ -1651,12 +1861,46 @@ function setFontSize(val) {
   document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
   localStorage.setItem('wusiyu_fontSize', state.fontSize);
   $('fontSizeValue').textContent = state.fontSize;
+  scheduleReaderSettingsSave();
 }
 function setLineHeight(val) {
   state.lineHeight = parseFloat(val);
   document.documentElement.style.setProperty('--line-height', state.lineHeight);
   localStorage.setItem('wusiyu_lineHeight', state.lineHeight);
   $('lineHeightValue').textContent = state.lineHeight.toFixed(1);
+  scheduleReaderSettingsSave();
+}
+
+function currentReaderSettings() {
+  return sharedCore.normalizeReaderSettings({
+    ...(state.readerSettings || {}),
+    theme: state.theme,
+    fontSize: state.fontSize,
+    lineHeight: state.lineHeight,
+    wordbookTheme: localStorage.getItem('wusiyu_wbTheme') || 'classic',
+  });
+}
+
+function scheduleReaderSettingsSave() {
+  if (!sharedCore || !state.readerSettings) return;
+  clearTimeout(readerSettingsTimer);
+  readerSettingsTimer = setTimeout(() => {
+    const record = sharedCore.createReadingSettingsRecord(currentReaderSettings(), {
+      now: Date.now(), deviceId: getDeviceId(),
+    });
+    runSyncMutation(current => sharedCore.mergeRecords(current, [record]));
+  }, 180);
+}
+
+async function changeReaderDisplaySettings(settings) {
+  state.readerSettings = sharedCore.normalizeReaderSettings(settings);
+  localStorage.setItem('wusiyu_readingMode', state.readerSettings.readingMode);
+  localStorage.setItem('wusiyu_twoColumn', String(state.readerSettings.twoColumn));
+  localStorage.setItem('wusiyu_pageMargin', state.readerSettings.pageMargin);
+  localStorage.setItem('wusiyu_paragraphSpacing', state.readerSettings.paragraphSpacing);
+  resetPageIndex();
+  if (state.blocks.length) renderPage();
+  scheduleReaderSettingsSave();
 }
 
 // ─── 侧栏 ──────────────────────────────────────────
@@ -1668,7 +1912,7 @@ function toggleSidebar() {
 
 // ─── 书籍存储（IndexedDB） ───────────────────────
 const DB_NAME = 'wusiyu_books';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let bookDB = null;
 
 function openBookDB() {
@@ -1680,6 +1924,11 @@ function openBookDB() {
       if (!db.objectStoreNames.contains('books')) {
         const store = db.createObjectStore('books', { keyPath: 'filename' });
         store.createIndex('name', 'name', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('records')) {
+        const records = db.createObjectStore('records', { keyPath: 'id' });
+        records.createIndex('type', 'type', { unique: false });
+        records.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
     };
     req.onsuccess = (e) => { bookDB = e.target.result; resolve(bookDB); };
@@ -2023,6 +2272,12 @@ async function importBookFromPath(path) {
 }
 
 // ─── 导入书籍（FileReader 解析） ─────────────────
+async function fileBookId(file) {
+  if (!globalThis.crypto?.subtle) throw new Error('当前浏览器无法计算书籍身份');
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return 'sha256:' + [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+}
+
 async function importBookFile(file) {
   const ext = '.' + file.name.split('.').pop().toLowerCase();
   const supported = ['.txt', '.epub', '.pdf', '.docx', '.html', '.htm'];
@@ -2068,11 +2323,15 @@ async function importBookFile(file) {
   if (paragraphs.length === 0) throw new Error('无法解析此书内容');
 
   const name = file.name.replace(/\.[^.]+$/, '');
+  const bookId = await fileBookId(file);
   const book = {
+    bookId,
+    bookAliases: [sharedCore.legacyBookAlias(file.name, file.size), sharedCore.legacyBookAlias(file.name)],
     filename: file.name,
     name,
     ext: ext.slice(1),
     size: file.size,
+    sourceBlob: file.slice(0, file.size, file.type || 'application/octet-stream'),
     addedAt: Date.now(),
     blocks,
     paragraphs,
@@ -2088,7 +2347,9 @@ async function loadBooks() {
   try {
     const books = await dbGetAllBooks();
     state.books = books.map(b => ({
-      filename: b.filename, name: b.name, ext: b.ext,
+      bookId: b.bookId || sharedCore.legacyBookAlias(b.filename, b.size),
+      bookAliases: b.bookAliases || [sharedCore.legacyBookAlias(b.filename, b.size), sharedCore.legacyBookAlias(b.filename)],
+      filename: b.filename, name: b.name, ext: b.ext, size: b.size,
       size_str: b.size > 1048576 ? (b.size/1048576).toFixed(1)+'MB' : (b.size/1024).toFixed(0)+'KB'
     }));
     if (state.books.length === 0) {
@@ -2147,7 +2408,14 @@ async function openBook(filename) {
     const book = await dbGetBook(filename);
     if (!book) { showToast('书籍不存在', 'error'); return; }
 
-    state.currentBook = { filename: book.filename, name: book.name, ext: book.ext };
+    state.currentBook = {
+      bookId: book.bookId || sharedCore.legacyBookAlias(book.filename, book.size),
+      bookAliases: book.bookAliases || [sharedCore.legacyBookAlias(book.filename, book.size), sharedCore.legacyBookAlias(book.filename)],
+      filename: book.filename,
+      name: book.name,
+      ext: book.ext,
+      size: book.size,
+    };
     state.blocks = (book.blocks && book.blocks.length)
       ? book.blocks
       : (book.paragraphs || []).map(text => ({ type: 'paragraph', text }));
@@ -2252,13 +2520,26 @@ function renderPage() {
   const availH = window.innerHeight - topbarH - mainPad - navH;
   container.style.height = Math.max(150, availH) + 'px';
 
+  if (state.readerSettings?.readingMode === 'scroll') {
+    for (let i = 0; i < total; i++) container.appendChild(renderBlock(state.blocks[i], i));
+    applyPhraseSentenceToDOM(container);
+    state._currentPageEnd = total;
+    highlightCurrentChapter();
+    readerControls?.setProgress(sharedCore.readingProgress(start, total));
+    requestAnimationFrame(() => {
+      const target = container.querySelector(`[data-block-index="${start}"]`);
+      if (target) container.scrollTop = Math.max(0, target.offsetTop - container.offsetTop);
+    });
+    return;
+  }
+
   // 一行的大约高度（用于判断"短段落"）
   const lineH = state.fontSize * state.lineHeight;
 
   // 一次性渲染所有候选段落
   let paraCount = 0;
   for (let i = start; i < total && paraCount < 80; i++) {
-    container.appendChild(renderBlock(state.blocks[i]));
+    container.appendChild(renderBlock(state.blocks[i], i));
     paraCount++;
   }
 
@@ -2266,8 +2547,12 @@ function renderPage() {
   applyPhraseSentenceToDOM(container);
 
   // 从后往前删，短段落有容差空间
+  const useColumns = state.readerSettings?.twoColumn && window.innerWidth > 900;
+  const overflowAmount = () => useColumns
+    ? container.scrollWidth - container.clientWidth
+    : container.scrollHeight - container.clientHeight;
   while (paraCount > 0) {
-    const overflow = container.scrollHeight - container.clientHeight;
+    const overflow = overflowAmount();
     if (overflow <= 2) break;
 
     // 检查最后一段是不是"短段落"（高度≈1行）
@@ -2291,10 +2576,10 @@ function renderPage() {
       // 只有一段而且是短的，强行再加一段
       const nextIdx = start + 1;
       if (nextIdx < total) {
-        container.appendChild(renderBlock(state.blocks[nextIdx]));
+        container.appendChild(renderBlock(state.blocks[nextIdx], nextIdx));
         paraCount++;
         // 如果再溢出就保持两段
-        if (container.scrollHeight > container.clientHeight + 4) {
+        if (overflowAmount() > 4) {
           container.removeChild(container.lastChild);
           paraCount--;
         }
@@ -2305,7 +2590,7 @@ function renderPage() {
   // 保证至少有 1 段（即使超高也要显示）
   if (paraCount === 0 && total > 0) {
     container.innerHTML = '';
-    const block = renderBlock(state.blocks[start]);
+    const block = renderBlock(state.blocks[start], start);
     block.style.overflow = 'auto';
     container.appendChild(block);
     paraCount = 1;
@@ -2325,6 +2610,7 @@ function renderPage() {
   el.pageInfo.textContent = `第 ${start+1}-${end} 项 / 共 ${total} 项`;
   el.prevBtn.disabled = start === 0;
   el.nextBtn.disabled = end >= total;
+  readerControls?.setProgress(sharedCore.readingProgress(start, total));
 
   // 更新章节高亮
   highlightCurrentChapter();
@@ -2367,10 +2653,11 @@ function rememberPageBoundary(start, end) {
   }
 }
 
-function renderBlock(block) {
+function renderBlock(block, blockIndex = -1) {
   if (block && block.type === 'image' && block.src) {
     const div = document.createElement('div');
     div.className = 'book-image-block';
+    if (blockIndex >= 0) div.dataset.blockIndex = blockIndex;
     const img = document.createElement('img');
     img.src = block.src;
     img.alt = block.alt || '';
@@ -2380,6 +2667,7 @@ function renderBlock(block) {
 
   const div = document.createElement('div');
   div.className = block && block.type === 'heading' ? 'paragraph heading' : 'paragraph';
+  if (blockIndex >= 0) div.dataset.blockIndex = blockIndex;
   const text = block && block.text ? block.text : '';
   div.innerHTML = processParagraph(escapeHtml(text));
   return div;
@@ -2434,6 +2722,22 @@ function nextPage() {
   state.currentParaIndex = next;
   renderPage();
 }
+
+let readerScrollTimer = null;
+el.paragraphs.addEventListener('scroll', function() {
+  if (state.readerSettings?.readingMode !== 'scroll' || !state.blocks.length) return;
+  clearTimeout(readerScrollTimer);
+  readerScrollTimer = setTimeout(() => {
+    const top = el.paragraphs.scrollTop + 8;
+    const children = [...el.paragraphs.children];
+    const current = children.find(node => node.offsetTop + node.offsetHeight - el.paragraphs.offsetTop > top) || children.at(-1);
+    const index = Math.max(0, Number(current?.dataset.blockIndex) || 0);
+    state.currentParaIndex = index;
+    highlightCurrentChapter();
+    readerControls?.setProgress(sharedCore.readingProgress(index, state.blocks.length));
+    if (state.currentBook?.filename) saveReadingHistory(state.currentBook.filename, index);
+  }, 120);
+});
 
 // ─── 跳转 ─────────────────────────────────────────
 function jumpTo() {
@@ -2492,31 +2796,78 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ─── 阅读历史 ────────────────────────────────────
+function bookDescriptor(filename) {
+  if (state.currentBook?.filename === filename) return state.currentBook;
+  return state.books.find(book => book.filename === filename) || {
+    filename,
+    bookId: sharedCore.legacyBookAlias(filename),
+    bookAliases: [sharedCore.legacyBookAlias(filename)],
+  };
+}
+
+function readingRecordForBook(book) {
+  const aliases = new Set([book.bookId, ...(book.bookAliases || [])].filter(Boolean));
+  return sharedCore.activeRecords(syncRecords, 'reading-position').find(record => {
+    const remoteAliases = [record.payload.bookId, ...(record.payload.bookAliases || [])];
+    return remoteAliases.some(alias => aliases.has(alias));
+  }) || null;
+}
+
 function loadReadingHistory(filename) {
-  try {
-    const all = JSON.parse(localStorage.getItem('wusiyu_history') || '{}');
-    return all[filename] || null;
-  } catch(e) { return null; }
+  const record = readingRecordForBook(bookDescriptor(filename));
+  if (!record) return null;
+  const resolved = sharedCore.resolveReadingPosition(record, state.blocks);
+  return { paraIndex: resolved.blockIndex, timestamp: record.updatedAt, strategy: resolved.strategy };
 }
 
 function saveReadingHistory(filename, paraIndex) {
-  try {
-    const all = JSON.parse(localStorage.getItem('wusiyu_history') || '{}');
-    all[filename] = {
-      paraIndex: paraIndex,
-      timestamp: Date.now()
-    };
-    // 限制历史记录数量（最多 50 本书）
-    const keys = Object.keys(all);
-    if (keys.length > 50) {
-      // 删除最旧的一半
-      const sorted = keys.sort((a, b) => (all[a].timestamp || 0) - (all[b].timestamp || 0));
-      for (let i = 0; i < sorted.length - 50; i++) {
-        delete all[sorted[i]];
-      }
+  const book = bookDescriptor(filename);
+  const previous = readingRecordForBook(book);
+  const identity = String(book.bookId || '').startsWith('sha256:')
+    ? book.bookId
+    : (previous?.payload?.bookId || book.bookId);
+  const aliases = [...new Set([
+    ...(previous?.payload?.bookAliases || []),
+    ...(book.bookAliases || []),
+    sharedCore.legacyBookAlias(filename, book.size),
+    sharedCore.legacyBookAlias(filename),
+  ])];
+  const now = Date.now();
+  const anchor = state.blocks[paraIndex]?.text || '';
+  const chapterTitle = state.chapters[state.currentChapter]?.title || '';
+  const record = sharedCore.createReadingPositionRecord({
+    bookId: identity,
+    bookAliases: aliases,
+    blockIndex: paraIndex,
+    progress: state.blocks.length > 1 ? paraIndex / (state.blocks.length - 1) : 0,
+    chapterTitle,
+    textAnchor: anchor,
+  }, { now, deviceId: getDeviceId() });
+
+  runSyncMutation(current => {
+    const changes = [record];
+    if (previous && previous.id !== record.id) {
+      changes.push(sharedCore.tombstoneRecord(previous, { now, deviceId: getDeviceId() }));
     }
+    return sharedCore.mergeRecords(current, changes);
+  }).then(() => {
+    const all = readStoredObject('wusiyu_history');
+    all[filename] = { paraIndex, timestamp: now };
     localStorage.setItem('wusiyu_history', JSON.stringify(all));
-  } catch(e) { /* ignore */ }
+  }).catch(error => console.error('保存阅读位置失败:', error));
+}
+
+function syncLegacyHistory() {
+  const history = {};
+  for (const book of state.books) {
+    const record = readingRecordForBook(book);
+    if (!record) continue;
+    history[book.filename] = {
+      paraIndex: record.payload.blockIndex,
+      timestamp: record.updatedAt,
+    };
+  }
+  localStorage.setItem('wusiyu_history', JSON.stringify(history));
 }
 
 // ── 翻译结果渲染 ─────────────────────────────────────
@@ -2928,10 +3279,10 @@ document.addEventListener('keydown', function(e) {
     if (el.sidebar.classList.contains('open')) { toggleSidebar(); return; }
   }
   // 左右箭头翻页
-  if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+  if (state.readerSettings?.readingMode !== 'scroll' && e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
     if (!el.wordPopup.classList.contains('show')) prevPage();
   }
-  if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+  if (state.readerSettings?.readingMode !== 'scroll' && e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
     if (!el.wordPopup.classList.contains('show')) nextPage();
   }
 });
@@ -2951,36 +3302,50 @@ window.addEventListener('resize', function() {
 const WB_KEY = 'wusiyu_wordbook';
 
 function getWordbook() {
-  try { return JSON.parse(localStorage.getItem(WB_KEY) || '{}'); }
-  catch(e) { return {}; }
+  return sharedCore ? sharedCore.vocabularyObject(syncRecords) : readStoredObject(WB_KEY);
 }
 
-function saveWordbook(wb) {
-  localStorage.setItem(WB_KEY, JSON.stringify(wb));
+function syncLegacyWordbook() {
+  localStorage.setItem(WB_KEY, JSON.stringify(getWordbook()));
 }
 
-function addToWordbook(entry) {
-  const wb = getWordbook();
-  const key = entry.type + ':' + entry.text.toLowerCase().trim();
-  if (wb[key]) { showToast('已在单词本中', 'error'); return false; }
-  entry.id = key;
-  entry.addedAt = Date.now();
-  entry.level = 0;
-  wb[key] = entry;
-  saveWordbook(wb);
-  showToast(`✅ 已加入 ${entry.type === 'word' ? '单词' : entry.type === 'phrase' ? '词组' : '句子'}本`, 'success');
-  // 刷新高亮
-  if (state.paragraphs.length > 0) renderPage();
-  return true;
+async function addToWordbook(entry) {
+  try {
+    const id = sharedCore.vocabularyId(entry.type, entry.text);
+    await runSyncMutation(current => {
+      const previous = current.find(record => record.type === 'vocabulary' && record.id === id) || null;
+      if (previous && previous.deletedAt == null) throw new Error('已在单词本中');
+      const record = sharedCore.upsertVocabularyRecord(entry, {
+        now: Date.now(),
+        deviceId: getDeviceId(),
+        current: previous,
+      });
+      return sharedCore.mergeRecords(current, [record]);
+    });
+    syncLegacyWordbook();
+    showToast(`✅ 已加入 ${entry.type === 'word' ? '单词' : entry.type === 'phrase' ? '词组' : '句子'}本`, 'success');
+    if (state.paragraphs.length > 0) renderPage();
+    return true;
+  } catch(e) {
+    showToast(e.message, 'error');
+    return false;
+  }
 }
 
-function removeFromWordbook(id) {
-  const wb = getWordbook();
-  if (!wb[id]) return;
-  delete wb[id];
-  saveWordbook(wb);
-  if (state.paragraphs.length > 0) renderPage();
-  renderWordbookList();
+async function removeFromWordbook(id) {
+  try {
+    await runSyncMutation(current => {
+      const previous = current.find(record => record.type === 'vocabulary' && record.id === id && record.deletedAt == null);
+      if (!previous) return current;
+      const deleted = sharedCore.deleteVocabularyRecord(previous, { now: Date.now(), deviceId: getDeviceId() });
+      return sharedCore.mergeRecords(current, [deleted]);
+    });
+    syncLegacyWordbook();
+    if (state.paragraphs.length > 0) renderPage();
+    renderWordbookList();
+  } catch(e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
 }
 
 function isInWordbook(text, type) {
@@ -3249,19 +3614,18 @@ function addWbButtonToPopup(text, type) {
   if (existing) {
     btn.textContent = '❌ 取消标记';
     btn.style.color = '#ef4444';
-    btn.onclick = function() {
+    btn.onclick = async function() {
       const key = type + ':' + text.toLowerCase().trim();
-      removeFromWordbook(key);
-      showToast('已从单词本移除', 'success');
+      await removeFromWordbook(key);
       // 刷新弹窗按钮
       addWbButtonToPopup(text, type);
     };
   } else {
     btn.textContent = '📝 加入单词本';
-    btn.onclick = function() {
+    btn.onclick = async function() {
       const source = getCurrentBookTitle();
       const trans = el.popupBody.textContent || '';
-      const success = addToWordbook({
+      const success = await addToWordbook({
         text: text, type: type,
         translation: trans,
         source: source, sentence: text
@@ -3359,6 +3723,41 @@ async function uploadFiles(files) {
   }
 }
 (async function init() {
+  try {
+    await initSharedData();
+  } catch(e) {
+    console.error('共享数据初始化失败:', e);
+    showToast('本地学习数据初始化失败: ' + e.message, 'error');
+    return;
+  }
+  const syncedReaderSettings = sharedCore.activeRecords(syncRecords, 'reading-settings')[0]?.payload || {};
+  state.readerSettings = sharedCore.normalizeReaderSettings({
+    theme: localStorage.getItem('wusiyu_theme') || 'light',
+    fontSize: Number(localStorage.getItem('wusiyu_fontSize') || 18),
+    lineHeight: Number(localStorage.getItem('wusiyu_lineHeight') || 1.9),
+    wordbookTheme: localStorage.getItem('wusiyu_wbTheme') || 'classic',
+    readingMode: localStorage.getItem('wusiyu_readingMode') || 'paged',
+    twoColumn: localStorage.getItem('wusiyu_twoColumn') === 'true',
+    pageMargin: Number(localStorage.getItem('wusiyu_pageMargin') || 20),
+    paragraphSpacing: Number(localStorage.getItem('wusiyu_paragraphSpacing') || 6),
+    ...syncedReaderSettings,
+  });
+  readerControls = sharedCore.mountReaderControls({
+    settingsPanel: el.settingsPanel,
+    readingArea: el.readingArea,
+    settings: state.readerSettings,
+    onChange: changeReaderDisplaySettings,
+  });
+  sharedCore.mountReviewPanel({
+    getRecords: () => syncRecords,
+    getDeviceId,
+    commitRecord: async record => {
+      await runSyncMutation(current => sharedCore.mergeRecords(current, [record]));
+      syncLegacyWordbook();
+      if ($('wbPanel').classList.contains('open')) renderWordbookList();
+    },
+    onDetail: entry => showWbDetail(entry.id),
+  });
   void checkForUpdates();
   // 📚 冷启动传书兜底：微信/文件管理器打开时原生先把路径写入
   // window.__pendingImportPath（WebView 未就绪也能写入），页面加载完成后再检查
@@ -3381,9 +3780,9 @@ async function uploadFiles(files) {
   }
 
   // 加载本地偏好
-  const savedTheme = localStorage.getItem('wusiyu_theme') || 'light';
-  const savedFontSize = parseInt(localStorage.getItem('wusiyu_fontSize')) || 18;
-  const savedLineHeight = parseFloat(localStorage.getItem('wusiyu_lineHeight')) || 1.9;
+  const savedTheme = state.readerSettings.theme;
+  const savedFontSize = state.readerSettings.fontSize;
+  const savedLineHeight = state.readerSettings.lineHeight;
 
   setTheme(savedTheme);
   $('fontSizeRange').value = savedFontSize;
@@ -3399,6 +3798,8 @@ async function uploadFiles(files) {
   // 首次使用：导入示例书
   if (state.books.length === 0) {
     const sample = {
+      bookId: sharedCore.legacyBookAlias('The Wonderful World of Words.txt', 0),
+      bookAliases: [sharedCore.legacyBookAlias('The Wonderful World of Words.txt', 0), sharedCore.legacyBookAlias('The Wonderful World of Words.txt')],
       filename: 'The Wonderful World of Words.txt',
       name: 'The Wonderful World of Words',
       ext: 'txt',
@@ -3452,7 +3853,8 @@ async function uploadFiles(files) {
     addWbButtonToPopup(text, detectType(text));
   };
   // 加载配色偏好
-  const wbTheme = localStorage.getItem('wusiyu_wbTheme') || 'classic';
+  const wbTheme = state.readerSettings.wordbookTheme;
+  localStorage.setItem('wusiyu_wbTheme', wbTheme);
   document.documentElement.setAttribute('data-wb-theme', wbTheme);
 })();
 </script>
