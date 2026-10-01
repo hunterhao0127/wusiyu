@@ -1424,13 +1424,15 @@ const sharedModulesPromise = Promise.all([
   import('./assets/shared/core/learning/review.js'),
   import('./assets/shared/core/reader/reading-position.js'),
   import('./assets/shared/core/reader/settings.js'),
+  import('./assets/shared/core/reader/annotation.js'),
   import('./assets/shared/core/sync/records.js'),
   import('./assets/shared/core/sync/backup.js'),
   import('./assets/shared/adapters/desktop-storage.js'),
   import('./assets/shared/ui/review-panel.js'),
   import('./assets/shared/ui/reader-controls.js'),
-]).then(([model, vocabulary, review, reading, readerSettings, records, backup, storage, reviewPanel, readerControls]) => ({
-  ...model, ...vocabulary, ...review, ...reading, ...readerSettings, ...records, ...backup, ...storage, ...reviewPanel, ...readerControls
+  import('./assets/shared/ui/annotation-panel.js'),
+]).then(([model, vocabulary, review, reading, readerSettings, annotation, records, backup, storage, reviewPanel, readerControls, annotationPanel]) => ({
+  ...model, ...vocabulary, ...review, ...reading, ...readerSettings, ...annotation, ...records, ...backup, ...storage, ...reviewPanel, ...readerControls, ...annotationPanel
 }));
 
 let sharedCore = null;
@@ -1438,6 +1440,7 @@ let syncStorage = null;
 let syncRecords = [];
 let syncWriteChain = Promise.resolve();
 let readerControls = null;
+let annotationUI = null;
 let readerSettingsTimer = null;
 
 function getDeviceId() {
@@ -1893,6 +1896,7 @@ function renderPage() {
   if (state.readerSettings?.readingMode === 'scroll') {
     for (let i = 0; i < total; i++) container.appendChild(renderBlock(state.blocks[i], i));
     applyPhraseSentenceToDOM(container);
+    annotationUI?.applyHighlights(container);
     state._currentPageEnd = total;
     highlightCurrentChapter();
     readerControls?.setProgress(sharedCore.readingProgress(start, total));
@@ -1967,6 +1971,8 @@ function renderPage() {
     // 超高段落重建后也要补词组/句子高亮
     applyPhraseSentenceToDOM(container);
   }
+
+  if (!buildingPageIndex) annotationUI?.applyHighlights(container);
 
   const end = start + paraCount;
   state._currentPageEnd = end;
@@ -2519,22 +2525,47 @@ function positionPopup(event) {
 
 // ─── 句子翻译 ─────────────────────────────────────
 document.addEventListener('mouseup', function(e) {
-  // 如果点击的是弹窗内的内容，不触发
-  if (el.wordPopup.contains(e.target)) return;
+  if (el.wordPopup.contains(e.target) || e.target.closest('#annotationSelectionMenu, #annotationEditor, #annotationPanel')) return;
 
   setTimeout(() => {
     const selection = window.getSelection();
-    const text = selection.toString().trim();
-    if (text && text.length > 2 && text.length < 500) {
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      el.sentenceBtn.style.top = (rect.bottom + 8) + 'px';
-      el.sentenceBtn.style.left = Math.max(8, rect.left + rect.width / 2 - 60) + 'px';
-      el.sentenceBtn.classList.add('show');
-      el.sentenceBtn.dataset.text = text;
-    } else {
-      el.sentenceBtn.classList.remove('show');
+    if (!selection?.rangeCount || selection.isCollapsed) return annotationUI?.hideSelection();
+    const range = selection.getRangeAt(0);
+    const startElement = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+    const endElement = range.endContainer.nodeType === Node.TEXT_NODE ? range.endContainer.parentElement : range.endContainer;
+    const startBlock = startElement?.closest?.('.paragraph[data-block-index]');
+    const endBlock = endElement?.closest?.('.paragraph[data-block-index]');
+    if (!startBlock || startBlock !== endBlock) {
+      annotationUI?.hideSelection();
+      if (startBlock || endBlock) showToast('请只选择同一段内的文字', 'error');
+      return;
     }
+    const blockIndex = Number(startBlock.dataset.blockIndex);
+    const blockText = String(state.blocks[blockIndex]?.text || '');
+    const startRange = document.createRange();
+    startRange.selectNodeContents(startBlock);
+    startRange.setEnd(range.startContainer, range.startOffset);
+    const endRange = document.createRange();
+    endRange.selectNodeContents(startBlock);
+    endRange.setEnd(range.endContainer, range.endOffset);
+    let startOffset = startRange.toString().length;
+    let endOffset = endRange.toString().length;
+    while (startOffset < endOffset && /\s/.test(blockText[startOffset])) startOffset++;
+    while (endOffset > startOffset && /\s/.test(blockText[endOffset - 1])) endOffset--;
+    const quote = blockText.slice(startOffset, endOffset);
+    if (!quote || quote.length > 500) {
+      annotationUI?.hideSelection();
+      if (quote.length > 500) showToast('一次最多选择 500 个字符', 'error');
+      return;
+    }
+    let chapterTitle = '';
+    for (let index = state.chapters.length - 1; index >= 0; index--) {
+      const chapterBlock = state.paraBlockIndexes[state.chapters[index].start] || 0;
+      if (blockIndex >= chapterBlock) { chapterTitle = state.chapters[index].title || ''; break; }
+    }
+    const rect = range.getBoundingClientRect();
+    el.sentenceBtn.dataset.text = quote;
+    annotationUI?.showSelection({ blockIndex, blockText, startOffset, endOffset, quote, chapterTitle }, rect);
   }, 10);
 });
 
@@ -2542,6 +2573,7 @@ document.addEventListener('mousedown', function(e) {
   if (!el.sentenceBtn.contains(e.target)) {
     el.sentenceBtn.classList.remove('show');
   }
+  if (!e.target.closest('#annotationSelectionMenu')) annotationUI?.hideSelection();
 });
 
 async function translateSelection() {
@@ -3082,6 +3114,39 @@ async function uploadFiles(files) {
       if ($('wbPanel').classList.contains('open')) renderWordbookList();
     },
     onDetail: entry => showWbDetail(entry.id),
+  });
+  annotationUI = sharedCore.mountAnnotationPanel({
+    getRecords: () => syncRecords,
+    getBook: () => state.currentBook,
+    getBlocks: () => state.blocks,
+    getDeviceId,
+    commitRecord: async record => {
+      await runSyncMutation(current => sharedCore.mergeRecords(current, [record]));
+    },
+    onChanged: () => renderPage(),
+    onJump: (location, record) => {
+      state.currentParaIndex = location.blockIndex;
+      renderPage();
+      requestAnimationFrame(() => {
+        const mark = document.querySelector(`[data-annotation-id="${CSS.escape(record.id)}"]`);
+        mark?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        mark?.classList.add('annotation-focus');
+        setTimeout(() => mark?.classList.remove('annotation-focus'), 1600);
+      });
+    },
+    onTranslate: draft => {
+      el.sentenceBtn.dataset.text = draft.quote;
+      translateSelection();
+    },
+    onAddVocabulary: text => addToWordbook({
+      text,
+      type: detectType(text),
+      translation: '',
+      source: getCurrentBookTitle(),
+      sentence: text,
+    }),
+    onMessage: showToast,
+    onDownload: (filename, markdown) => downloadBlob(filename, new Blob([markdown], { type: 'text/markdown;charset=utf-8' })),
   });
   // 加载本地偏好
   const savedTheme = state.readerSettings.theme;

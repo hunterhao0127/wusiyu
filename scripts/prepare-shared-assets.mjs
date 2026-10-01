@@ -9,6 +9,7 @@ const files = [
   'core/learning/review.js',
   'core/reader/reading-position.js',
   'core/reader/settings.js',
+  'core/reader/annotation.js',
   'core/sync/records.js',
   'core/sync/backup.js',
   'core/sync/book-archive.js',
@@ -16,11 +17,13 @@ const files = [
   'adapters/desktop-storage.js',
   'ui/review-panel.js',
   'ui/reader-controls.js',
+  'ui/annotation-panel.js',
 ];
-const destinations = [
+const allDestinations = [
   path.join(root, 'web/assets/shared'),
   path.join(root, '02-Mac版/flask-app/static/assets/shared'),
 ];
+const destinations = process.argv.includes('--web-only') ? allDestinations.slice(0, 1) : allDestinations;
 const checkOnly = process.argv.includes('--check');
 
 for (const destination of destinations) {

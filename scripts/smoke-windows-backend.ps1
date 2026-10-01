@@ -25,7 +25,7 @@ try {
             Start-Sleep -Milliseconds 500
         }
     }
-    if (-not $version.success -or $version.version -ne '1.6.0') {
+    if (-not $version.success -or $version.version -ne '1.6.1') {
         throw '后端版本接口未就绪或版本不匹配'
     }
 

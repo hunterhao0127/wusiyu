@@ -6,11 +6,11 @@
 
 [![🚀 在线体验网页版（点击直达）](https://img.shields.io/badge/%F0%9F%9A%80_%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C_%E7%BD%91%E9%A1%B5%E7%89%88-%E7%82%B9%E5%87%BB%E7%9B%B4%E8%BE%BE-2ea44f?style=for-the-badge)](https://hunterhao0127.github.io/wusiyu/)
 
-![version](https://img.shields.io/badge/version-1.6.0-blue)
+![version](https://img.shields.io/badge/version-1.6.1-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Web-green)
 ![license](https://img.shields.io/badge/license-MIT-orange)
 
-> 当前更新进度：macOS 与网页版为 v1.6.0；Windows 版暂维持 v1.5.5，待 Windows 真机完成构建和升级验证后再发布 v1.6.0。
+> 当前更新进度：macOS 与网页版为 v1.6.1；Windows 安装包由同一桌面后端通过自动构建生成，仍需 Windows 真机完成安装与升级验证后再正式发布。
 
 ---
 
@@ -29,7 +29,7 @@ cd 02-Mac版
 bash build-mac.sh
 ```
 
-构建完成后，安装包在 `dist/务思语-1.6.0-arm64.dmg`。仓库不提交 `.dmg`、书籍、API Key、单词本和阅读历史；这些都只保存在用户本机。
+构建完成后，安装包在 `dist/务思语-1.6.1-arm64.dmg`。仓库不提交 `.dmg`、书籍、API Key、单词本和阅读历史；这些都只保存在用户本机。
 
 开发和多端跟进文档：
 

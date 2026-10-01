@@ -108,6 +108,13 @@ class BackendContracts(unittest.TestCase):
             "deviceId": "mac-test",
             "deletedAt": None,
             "payload": {"id": "word:hello", "type": "word", "text": "hello"},
+        }, {
+            "id": "annotation:hello",
+            "type": "annotation",
+            "updatedAt": 11,
+            "deviceId": "mac-test",
+            "deletedAt": None,
+            "payload": {"id": "annotation:hello", "quote": "hello", "note": "笔记"},
         }]
         response = self.client.put("/api/sync-records", json={"records": records})
         self.assertEqual(response.status_code, 200)
@@ -295,7 +302,7 @@ class FrontendContracts(unittest.TestCase):
         self.assertIn("'backend', 'wusiyu_backend.exe'", main)
         self.assertIn("WUSIYU_DATA_DIR: app.getPath('userData')", main)
         self.assertIn("release.downloads && release.downloads.windows", main)
-        self.assertEqual(package["version"], "1.6.0")
+        self.assertEqual(package["version"], "1.6.1")
         self.assertEqual(package["build"]["extraResources"][0]["from"], "backend/wusiyu_backend.exe")
         self.assertIn("02-Mac版/flask-app/requirements.txt", workflow)
         self.assertIn("build-windows-backend.ps1", workflow)

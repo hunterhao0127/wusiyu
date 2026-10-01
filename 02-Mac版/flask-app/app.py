@@ -48,7 +48,7 @@ CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
 VERSION_FILE = os.path.join(APP_DIR, '务思语_version.txt')
 HISTORY_FILE = os.path.join(APP_DIR, 'reading_history.json')
 SYNC_RECORDS_FILE = os.path.join(APP_DIR, 'sync_records.json')
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.6.1"
 
 DEFAULT_CONFIG = {
     "api_key": "",
@@ -96,7 +96,7 @@ def save_reading_history(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-SYNC_RECORD_TYPES = {"vocabulary", "reading-position", "reading-settings", "learning-settings", "ai-settings"}
+SYNC_RECORD_TYPES = {"vocabulary", "reading-position", "reading-settings", "learning-settings", "ai-settings", "annotation"}
 FORBIDDEN_SYNC_KEYS = {"apikey", "authorization", "xapikey"}
 
 
