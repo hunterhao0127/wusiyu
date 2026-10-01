@@ -1,11 +1,13 @@
 {
-  "version": "1.6.0",
-  "releasedAt": "2026-09-09",
+  "version": "1.6.1",
+  "releasedAt": "2026-10-01",
   "notes": [
     "Mac、Windows、网页可互相导入学习数据和所选书籍",
     "新增到期复习、每日计划、困难词、评分纠正和学习统计",
     "新增滚动阅读、宽屏双栏、阅读进度和版面调节",
-    "Mac、Windows、网页均可提示新版本"
+    "Mac、Windows、网页均可提示新版本",
+    "新增可编辑批注：高亮、笔记面板、颜色、筛选与 Markdown 导出",
+    "已批注文本再次选择可继续查看或编辑原笔记，不会产生重叠重复批注"
   ],
   "downloads": {
     "mac": "https://github.com/hunterhao0127/wusiyu/releases/latest",

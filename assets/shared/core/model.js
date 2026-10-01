@@ -4,6 +4,7 @@ export const RECORD_TYPES = new Set([
   'reading-settings',
   'learning-settings',
   'ai-settings',
+  'annotation',
 ]);
 
 export function normalizeText(value) {
